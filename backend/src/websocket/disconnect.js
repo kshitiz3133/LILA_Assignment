@@ -8,7 +8,7 @@
  *  4. If timer fires → apply forfeit, game_over to opponent, destroy room
  */
 
-const { Player, Match } = require('../models');
+const { Player, Match, MatchPlayer } = require('../models');
 const { applyForfeit } = require('../services/game');
 const { clearTurnTimer } = require('../services/timer');
 const { getRoom, getRoomByPlayer, broadcast, destroyRoom, sendTo } = require('./rooms');
@@ -55,6 +55,13 @@ async function handleDisconnect(playerId) {
 
     const { result, winnerId } = await applyForfeit(freshMatch, playerId, 'forfeit');
 
+    const { Player } = require('../models');
+    const [pX, pO] = await Promise.all([
+      Player.findByPk(freshMatch.player_x_id, { attributes: ['id', 'username', 'rank'] }),
+      Player.findByPk(freshMatch.player_o_id, { attributes: ['id', 'username', 'rank'] }),
+    ]);
+    const dcWinner = winnerId === freshMatch.player_x_id ? pX : pO;
+
     const rankChanges = {
       [freshMatch.player_x_id]: winnerId === freshMatch.player_x_id ? +30 : -20,
       [freshMatch.player_o_id]: winnerId === freshMatch.player_o_id ? +30 : -20,
@@ -64,6 +71,11 @@ async function handleDisconnect(playerId) {
       type: 'game_over',
       result,
       winnerId,
+      winnerUsername: dcWinner?.username || null,
+      players: {
+        X: { id: pX?.id, username: pX?.username, rank: pX?.rank },
+        O: { id: pO?.id, username: pO?.username, rank: pO?.rank },
+      },
       rankChanges,
       reason: 'forfeit',
     });
@@ -88,10 +100,29 @@ async function handleReconnect(playerId) {
   const match = await Match.findByPk(room.matchId);
   if (!match || match.status !== 'active') return;
 
+  // Derive current turn and lastMovedAt from MatchPlayer
+  const mps = await MatchPlayer.findAll({ where: { match_id: match.id } });
+  const mpX = mps.find(mp => mp.symbol === 'X');
+  const mpO = mps.find(mp => mp.symbol === 'O');
+
+  const lastMovedAt = {
+    X: mpX?.last_player_moved_at || null,
+    O: mpO?.last_player_moved_at || null,
+  };
+
+  let currentTurn = 'X';
+  if (mpX && mpO) {
+    const xTime = lastMovedAt.X ? new Date(lastMovedAt.X).getTime() : 0;
+    const oTime = lastMovedAt.O ? new Date(lastMovedAt.O).getTime() : 0;
+    if (xTime === 0 && oTime === 0) currentTurn = 'X';
+    else currentTurn = xTime > oTime ? 'O' : 'X';
+  }
+
   sendTo(playerId, {
     type: 'reconnected',
     board: match.board,
-    currentTurn: match.current_turn,
+    currentTurn,
+    lastMovedAt,
     matchId: match.id,
   });
 

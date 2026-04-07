@@ -6,8 +6,36 @@
  */
 
 const jwt = require('jsonwebtoken');
-const { Player, Match } = require('../models');
+const { Player, Match, MatchPlayer } = require('../models');
 const { applyMove } = require('../services/game');
+
+/**
+ * Derive whose turn it is from MatchPlayer.last_player_moved_at.
+ * The player who moved most recently already went → it's the other's turn.
+ * If neither moved yet, X goes first.
+ */
+/**
+ * Derive turn info from MatchPlayer.last_player_moved_at.
+ * Returns { currentTurn, lastMovedAt: { X: date|null, O: date|null } }
+ */
+async function getTurnInfo(matchId) {
+  const mps = await MatchPlayer.findAll({ where: { match_id: matchId } });
+  const mpX = mps.find(mp => mp.symbol === 'X');
+  const mpO = mps.find(mp => mp.symbol === 'O');
+
+  const lastMovedAt = {
+    X: mpX?.last_player_moved_at || null,
+    O: mpO?.last_player_moved_at || null,
+  };
+
+  if (!mpX || !mpO) return { currentTurn: 'X', lastMovedAt };
+
+  const xTime = lastMovedAt.X ? new Date(lastMovedAt.X).getTime() : 0;
+  const oTime = lastMovedAt.O ? new Date(lastMovedAt.O).getTime() : 0;
+
+  const currentTurn = (xTime === 0 && oTime === 0) ? 'X' : (xTime > oTime ? 'O' : 'X');
+  return { currentTurn, lastMovedAt };
+}
 const { startTurnTimer, clearTurnTimer } = require('../services/timer');
 const { handleDisconnect, handleReconnect } = require('./disconnect');
 const {
@@ -75,11 +103,22 @@ async function handleConnection(ws, req) {
 
         clearTurnTimer(matchId);
 
+        const [pX, pO] = await Promise.all([
+          Player.findByPk(match.player_x_id, { attributes: ['id', 'username', 'rank'] }),
+          Player.findByPk(match.player_o_id, { attributes: ['id', 'username', 'rank'] }),
+        ]);
+        const fWinner = forfeitData.winnerId === match.player_x_id ? pX : pO;
+
         broadcast(matchId, {
           type: 'game_over',
           board: match.board,
           result: forfeitData.result,
           winnerId: forfeitData.winnerId,
+          winnerUsername: fWinner?.username || null,
+          players: {
+            X: { id: pX?.id, username: pX?.username, rank: pX?.rank },
+            O: { id: pO?.id, username: pO?.username, rank: pO?.rank },
+          },
           rankChanges: forfeitData.rankChanges,
         });
 
@@ -116,21 +155,23 @@ async function handleJoinMatch(ws, player, msg) {
   const bothConnected = !!(room?.wsX && room?.wsO);
 
   const symbol = String(match.player_x_id) === String(player.id) ? 'X' : 'O';
+  const { currentTurn, lastMovedAt } = await getTurnInfo(matchId);
 
   // Always send acknowledgment to the joiner immediately
-  send(ws, { 
-    type: 'joined_match', 
-    matchId, 
-    board: match.board, 
-    currentTurn: match.current_turn, 
-    status: (match.status === 'started' && bothConnected) ? 'active' : match.status, 
-    symbol 
+  send(ws, {
+    type: 'joined_match',
+    matchId,
+    board: match.board,
+    currentTurn,
+    lastMovedAt,
+    status: (match.status === 'started' && bothConnected) ? 'active' : match.status,
+    symbol
   });
 
   // If transition just triggered, broadcast to everyone
   if (match.status === 'started' && bothConnected) {
     await match.update({ status: 'active' });
-    broadcast(matchId, { type: 'game_started', board: match.board, currentTurn: match.current_turn });
+    broadcast(matchId, { type: 'game_started', board: match.board, currentTurn, lastMovedAt });
   }
 }
 
@@ -142,7 +183,7 @@ async function handleMakeMove(ws, player, msg) {
 
   const match = await Match.findByPk(matchId);
   if (!match) return send(ws, { type: 'error', message: 'Match not found' });
-  if (match.status !== 'active') {
+  if (match.status !== 'active' && match.status !== 'started') {
     return send(ws, { type: 'move_rejected', reason: 'Match is not active' });
   }
 
@@ -153,27 +194,69 @@ async function handleMakeMove(ws, player, msg) {
   }
 
   if (result.gameOver) {
+    // Build game over payload BEFORE sending anything, so move_accepted includes it
     clearTurnTimer(matchId);
+
+    const [playerX, playerO] = await Promise.all([
+      Player.findByPk(match.player_x_id, { attributes: ['id', 'username', 'rank'] }),
+      Player.findByPk(match.player_o_id, { attributes: ['id', 'username', 'rank'] }),
+    ]);
 
     const rankChanges = {
       [match.player_x_id]: result.winnerId === match.player_x_id ? +30 : (result.result === 'draw' ? 0 : -20),
       [match.player_o_id]: result.winnerId === match.player_o_id ? +30 : (result.result === 'draw' ? 0 : -20),
     };
 
+    const winner = result.winnerId
+      ? (result.winnerId === match.player_x_id ? playerX : playerO)
+      : null;
+
+    const gameOverPayload = {
+      result: result.result,
+      winnerId: result.winnerId,
+      winnerUsername: winner?.username || null,
+      players: {
+        X: { id: playerX?.id, username: playerX?.username, rank: playerX?.rank },
+        O: { id: playerO?.id, username: playerO?.username, rank: playerO?.rank },
+      },
+      rankChanges,
+    };
+
+    // Send move_accepted WITH game over data to the mover
+    send(ws, {
+      type: 'move_accepted',
+      cell: Number(cell),
+      board: result.board,
+      currentTurn: result.currentTurn,
+      lastMovedAt: result.lastMovedAt,
+      gameOver: true,
+      ...gameOverPayload,
+    });
+
+    // Broadcast game_over to both players (opponent needs it too)
     broadcast(matchId, {
       type: 'game_over',
       board: result.board,
-      result: result.result,
-      winnerId: result.winnerId,
-      rankChanges,
+      ...gameOverPayload,
     });
 
     destroyRoom(matchId);
   } else {
+    // Acknowledge non-finishing move to the mover
+    send(ws, {
+      type: 'move_accepted',
+      cell: Number(cell),
+      board: result.board,
+      currentTurn: result.currentTurn,
+      lastMovedAt: result.lastMovedAt,
+      gameOver: false,
+    });
+
     broadcast(matchId, {
       type: 'board_update',
       board: result.board,
       currentTurn: result.currentTurn,
+      lastMovedAt: result.lastMovedAt,
     });
 
     // Restart turn timer in timed mode

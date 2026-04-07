@@ -8,7 +8,7 @@
  *  - Update streaks
  */
 
-const { Player, Match } = require('../models');
+const { Player, Match, MatchPlayer } = require('../models');
 
 const WIN_LINES = [
   [0,1,2],[3,4,5],[6,7,8], // rows
@@ -31,15 +31,39 @@ function isDraw(board) {
 
 /**
  * Apply a move. Returns { ok, reason, board, currentTurn, gameOver, result, winnerId }
+ *
+ * Turn order is determined by last_player_moved_at on MatchPlayer:
+ * the player who moved most recently already took their turn,
+ * so the other player is the one who should move next.
  */
 async function applyMove(match, playerId, cell) {
   const board = match.board.split('');
-  const symbol = match.player_x_id === playerId ? 'X' : 'O';
 
-  // Validate turn
-  if (match.current_turn !== symbol) {
+  // Look up both MatchPlayer rows to determine whose turn it is
+  const matchPlayers = await MatchPlayer.findAll({ where: { match_id: match.id } });
+  const mover = matchPlayers.find(mp => String(mp.player_id) === String(playerId));
+  const opponent = matchPlayers.find(mp => String(mp.player_id) !== String(playerId));
+
+  if (!mover || !opponent) {
+    return { ok: false, reason: 'Player not found in match' };
+  }
+
+  const symbol = mover.symbol; // 'X' or 'O'
+
+  // Validate turn: the player whose last_player_moved_at is MORE recent
+  // is the one who just went — so it's the OTHER player's turn.
+  // If neither has moved yet (both null), X goes first by convention.
+  const moverTime = mover.last_player_moved_at ? new Date(mover.last_player_moved_at).getTime() : 0;
+  const opponentTime = opponent.last_player_moved_at ? new Date(opponent.last_player_moved_at).getTime() : 0;
+
+  if (moverTime > opponentTime) {
     return { ok: false, reason: 'Not your turn' };
   }
+  // If both are 0 (game start), only X can go first
+  if (moverTime === 0 && opponentTime === 0 && symbol !== 'X') {
+    return { ok: false, reason: 'Not your turn' };
+  }
+
   // Validate cell range
   if (cell < 0 || cell > 8) {
     return { ok: false, reason: 'Invalid cell index' };
@@ -51,6 +75,17 @@ async function applyMove(match, playerId, cell) {
 
   board[cell] = symbol;
   const boardStr = board.join('');
+  const now = new Date();
+
+  // Record the move on the MatchPlayer row
+  await mover.update({ last_player_moved_at: now, last_player_move: [cell] });
+
+  // Build lastMovedAt payload for frontend
+  const lastMovedAt = {
+    [mover.symbol]: now,
+    [opponent.symbol]: opponent.last_player_moved_at || null,
+  };
+
   const winner = checkWinner(boardStr);
   const draw = !winner && isDraw(boardStr);
 
@@ -60,23 +95,25 @@ async function applyMove(match, playerId, cell) {
     else if (winner === 'O') { result = 'o_wins'; winnerId = match.player_o_id; }
     else { result = 'draw'; winnerId = null; }
 
+    const nextTurn = symbol === 'X' ? 'O' : 'X';
     await match.update({
       board: boardStr,
+      current_turn: nextTurn,
       status: 'finished',
       result,
       winner_id: winnerId,
-      finished_at: new Date(),
+      finished_at: now,
     });
 
     await applyRankChanges(match, winnerId, result);
 
-    return { ok: true, board: boardStr, currentTurn: null, gameOver: true, result, winnerId };
+    return { ok: true, board: boardStr, currentTurn: null, lastMovedAt, gameOver: true, result, winnerId };
   }
 
   const nextTurn = symbol === 'X' ? 'O' : 'X';
   await match.update({ board: boardStr, current_turn: nextTurn });
 
-  return { ok: true, board: boardStr, currentTurn: nextTurn, gameOver: false };
+  return { ok: true, board: boardStr, currentTurn: nextTurn, lastMovedAt, gameOver: false };
 }
 
 async function applyRankChanges(match, winnerId, result) {
