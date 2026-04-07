@@ -65,15 +65,27 @@ export default function ProfilePage() {
                         </div>
 
                         <div className="bg-dark-800 p-4 rounded-xl border border-dark-400 text-center">
-                            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Highest Streak</p>
-                            <p className="text-2xl font-bold text-white">{user.best_streak} W</p>
+                            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Wins</p>
+                            <p className="text-2xl font-bold text-success">{user.wins}</p>
                         </div>
 
                         <div className="bg-dark-800 p-4 rounded-xl border border-dark-400 text-center">
-                            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Global Standing</p>
-                            <p className="text-2xl font-bold text-white flex justify-center items-center gap-2">
-                                <Medal className="w-5 h-5 text-gray-500" /> View
+                            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Losses</p>
+                            <p className="text-2xl font-bold text-error">{user.losses}</p>
+                        </div>
+
+                        <div className="bg-dark-800 p-4 rounded-xl border border-dark-400 text-center">
+                            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Win Rate</p>
+                            <p className="text-2xl font-bold text-white">
+                                {(user.wins + user.losses) > 0
+                                    ? Math.round((user.wins / (user.wins + user.losses)) * 100)
+                                    : 0}%
                             </p>
+                        </div>
+
+                        <div className="bg-dark-800 p-4 rounded-xl border border-dark-400 text-center">
+                            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Best Streak</p>
+                            <p className="text-2xl font-bold text-white">{user.best_streak} W</p>
                         </div>
                     </div>
 

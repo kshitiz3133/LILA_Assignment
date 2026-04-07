@@ -33,7 +33,7 @@ export default function NavBar() {
                     <div className="flex items-center gap-3">
                         <div className="flex flex-col items-end">
                             <span className="text-sm font-semibold text-white leading-none">{user.username}</span>
-                            <span className="text-xs text-brand-400 font-medium">Rank: {user.rank_score}</span>
+                            <span className="text-xs text-brand-400 font-medium">Rank: {user.rank}</span>
                         </div>
                         <div className="w-8 h-8 rounded-full bg-dark-400 border border-dark-400 flex items-center justify-center">
                             <UserIcon className="w-4 h-4 text-gray-300" />

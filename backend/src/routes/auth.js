@@ -81,6 +81,7 @@ router.get('/me', authMiddleware, async (req, res) => {
         losses: player.losses,
         win_streak: player.win_streak,
         best_streak: player.best_streak,
+        current_match_id: player.current_match_id,
       }
     });
   } catch (err) {
