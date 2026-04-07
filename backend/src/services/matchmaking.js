@@ -14,7 +14,7 @@
  *   90s+     → timeout — removed from queue, client notified
  */
 
-const { Player, Match } = require('../models');
+const { Player, Match, MatchPlayer } = require('../models');
 const { getWsClient, broadcast } = require('../websocket/rooms');
 
 const QUEUE_TIMEOUT_MS = 90 * 1000;
@@ -106,6 +106,14 @@ async function pairPlayers(playerA, playerB) {
       started_at: new Date(),
     });
 
+    // Create the explicit identifier mapping in the DB.
+    // The DB's UNIQUE(match_id, symbol) ensures 100% strictness.
+    // By artificially setting last_player_moved_at on playerO, X knows it is their turn first.
+    await MatchPlayer.bulkCreate([
+      { match_id: match.id, player_id: playerX.id, symbol: 'X' },
+      { match_id: match.id, player_id: playerO.id, symbol: 'O', last_player_moved_at: new Date() }
+    ]);
+
     await Player.update(
       { search_started_at: null, search_mode: null, current_match_id: match.id },
       { where: { id: [playerX.id, playerO.id] } }
@@ -131,8 +139,7 @@ async function pairPlayers(playerA, playerB) {
 }
 
 function startMatchmakingLoop() {
-  setInterval(runMatchmakingTick, POLL_INTERVAL_MS);
-  console.log('[Matchmaking] Loop started (poll every 2s)');
+  console.log('[Matchmaking] Service ready (Handling requests natively)');
 }
 
-module.exports = { addToQueue, removeFromQueue, startMatchmakingLoop };
+module.exports = { addToQueue, removeFromQueue, startMatchmakingLoop, runMatchmakingTick };

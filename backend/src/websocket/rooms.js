@@ -12,31 +12,36 @@ const playerRoomMap = new Map(); // playerId → matchId
 const playerWsMap = new Map();   // playerId → WebSocket
 
 function createRoom(matchId, playerXId, playerOId) {
-  rooms.set(matchId, {
-    matchId,
-    playerXId,
-    playerOId,
+  const mId = String(matchId);
+  const pxId = String(playerXId);
+  const poId = String(playerOId);
+
+  rooms.set(mId, {
+    matchId: mId,
+    playerXId: pxId,
+    playerOId: poId,
     wsX: null,
     wsO: null,
     timerRef: null,
     disconnectTimers: {},
   });
-  playerRoomMap.set(playerXId, matchId);
-  playerRoomMap.set(playerOId, matchId);
+  playerRoomMap.set(pxId, mId);
+  playerRoomMap.set(poId, mId);
 }
 
 function setPlayerWs(playerId, ws) {
-  playerWsMap.set(playerId, ws);
-  const matchId = playerRoomMap.get(playerId);
+  const pId = String(playerId);
+  playerWsMap.set(pId, ws);
+  const matchId = playerRoomMap.get(pId);
   if (!matchId) return;
   const room = rooms.get(matchId);
   if (!room) return;
-  if (room.playerXId === playerId) room.wsX = ws;
-  if (room.playerOId === playerId) room.wsO = ws;
+  if (room.playerXId === pId) room.wsX = ws;
+  if (room.playerOId === pId) room.wsO = ws;
 }
 
 function getRoom(matchId) {
-  return rooms.get(matchId);
+  return rooms.get(String(matchId));
 }
 
 function getRoomByPlayer(playerId) {

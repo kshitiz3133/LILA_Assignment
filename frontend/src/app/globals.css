@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed;
+  --color-dark-400: #1e293b;
+  --color-dark-800: #0f172a;
+  --color-dark-900: #020617;
+  --color-success: #10b981;
+  --color-error: #ef4444;
+}
+
+:root {
+  --background: #020617;
+  --foreground: #f8fafc;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  margin: 0;
+  padding: 0;
+  background-image: radial-gradient(circle at 50% -20%, #1e1b4b, #020617 80%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}

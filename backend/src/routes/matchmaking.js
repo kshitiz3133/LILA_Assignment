@@ -47,4 +47,22 @@ router.delete('/leave', auth, async (req, res) => {
   return res.json({ message: 'Left matchmaking queue' });
 });
 
+// GET /matchmaking/status
+router.get('/status', auth, async (req, res) => {
+  const player = await Player.findByPk(req.player.id);
+  if (!player) return res.status(404).json({ error: 'Player not found' });
+
+  // Trigger algorithmic check
+  await matchmakingService.runMatchmakingTick();
+
+  // Re-fetch to check if assignment happened
+  const freshPlayer = await Player.findByPk(req.player.id);
+
+  if (freshPlayer.current_match_id) {
+    return res.json({ status: 'matched', matchId: freshPlayer.current_match_id });
+  } else {
+    return res.json({ status: 'searching' });
+  }
+});
+
 module.exports = router;

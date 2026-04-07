@@ -62,6 +62,28 @@ async function handleConnection(ws, req) {
 
       } else if (type === 'make_move') {
         await handleMakeMove(ws, player, msg);
+      } else if (type === 'forfeit') {
+        const { matchId } = msg;
+
+        const match = await Match.findByPk(matchId);
+        if (!match || ['finished', 'waiting'].includes(match.status)) return;
+        
+        const { applyForfeit } = require('../services/game');
+        const forfeitData = await applyForfeit(match, player.id, 'forfeit');
+
+        // Note: clearTurnTimer and broadcast implicitly rely on match room scope.
+
+        clearTurnTimer(matchId);
+
+        broadcast(matchId, {
+          type: 'game_over',
+          board: match.board,
+          result: forfeitData.result,
+          winnerId: forfeitData.winnerId,
+          rankChanges: forfeitData.rankChanges,
+        });
+
+        destroyRoom(matchId);
       }
     } catch (err) {
       console.error(`[WS] Error handling ${type}:`, err);
@@ -84,21 +106,31 @@ async function handleJoinMatch(ws, player, msg) {
     return send(ws, { type: 'error', message: 'You are not in this match' });
   }
 
-  // Create room if not exists
+  // Final safeguard: ensure room exists
   if (!getRoom(matchId)) {
     createRoom(matchId, match.player_x_id, match.player_o_id);
   }
   setPlayerWs(player.id, ws);
 
   const room = getRoom(matchId);
-  const bothConnected = room.wsX && room.wsO;
+  const bothConnected = !!(room?.wsX && room?.wsO);
 
-  // Transition started → active when both join
+  const symbol = String(match.player_x_id) === String(player.id) ? 'X' : 'O';
+
+  // Always send acknowledgment to the joiner immediately
+  send(ws, { 
+    type: 'joined_match', 
+    matchId, 
+    board: match.board, 
+    currentTurn: match.current_turn, 
+    status: (match.status === 'started' && bothConnected) ? 'active' : match.status, 
+    symbol 
+  });
+
+  // If transition just triggered, broadcast to everyone
   if (match.status === 'started' && bothConnected) {
     await match.update({ status: 'active' });
     broadcast(matchId, { type: 'game_started', board: match.board, currentTurn: match.current_turn });
-  } else {
-    send(ws, { type: 'joined_match', matchId, board: match.board, currentTurn: match.current_turn, status: match.status });
   }
 }
 

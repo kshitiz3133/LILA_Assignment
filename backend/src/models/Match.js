@@ -44,7 +44,6 @@ const Match = sequelize.define('Match', {
   winner_id: {
     type: DataTypes.UUID,
     allowNull: true,
-    defaultValue: null,
   },
   started_at: {
     type: DataTypes.DATE,

@@ -16,7 +16,10 @@ const playersRouter = require('./routes/players');
 const { handleConnection } = require('./websocket/handler');
 const { startMatchmakingLoop } = require('./services/matchmaking');
 
+const cors = require('cors');
+
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 // Health check

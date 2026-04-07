@@ -140,9 +140,9 @@ async function applyForfeit(match, forfeitingPlayerId, reason = 'forfeit') {
     finished_at: new Date(),
   });
 
-  await applyRankChanges(match, winnerId, result);
+  const { rankChanges } = await applyRankChanges(match, winnerId, result);
 
-  return { result, winnerId };
+  return { result, winnerId, rankChanges };
 }
 
 module.exports = { applyMove, applyForfeit, applyRankChanges };

@@ -12,6 +12,10 @@ const Player = sequelize.define('Player', {
     allowNull: false,
     unique: true,
   },
+  ip_address: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   rank: {
     type: DataTypes.INTEGER,
     defaultValue: 1000,
