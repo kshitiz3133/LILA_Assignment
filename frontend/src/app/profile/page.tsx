@@ -60,7 +60,7 @@ export default function ProfilePage() {
                                 <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-brand-300">
                                     {user.rank}
                                 </span>
-                                <span className="text-brand-500 font-bold mb-1 uppercase tracking-wider text-sm">ELO</span>
+                                <span className="text-brand-500 font-bold mb-1 uppercase tracking-wider text-sm">{user.rank} ELO</span>
                             </div>
                         </div>
 

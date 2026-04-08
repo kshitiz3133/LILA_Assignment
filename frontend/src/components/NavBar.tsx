@@ -16,7 +16,7 @@ export default function NavBar() {
             <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
                 <Link href="/" className="flex items-center gap-2 text-white hover:opacity-80 transition">
                     <Gamepad2 className="w-6 h-6 text-brand-500" />
-                    <span className="font-bold text-lg tracking-tight">Ranked TTT</span>
+                    <span className="font-bold text-lg tracking-tight">Ranked</span>
                 </Link>
 
                 <div className="flex items-center gap-6">
