@@ -58,7 +58,7 @@ export default function LoginPage() {
                         >
                             <Swords className="w-10 h-10 text-brand-400" />
                         </motion.div>
-                        <h1 className="text-3xl font-black text-white tracking-tight">Tic Tac Clash</h1>
+                        <h1 className="text-3xl font-black text-white tracking-tight">Tic Tac Toe</h1>
                         <p className="text-gray-400 mt-2 text-sm">Enter a nickname to jump into ranked matches</p>
                     </div>
 
