@@ -8,7 +8,7 @@ import { Trophy, Medal, Loader2, Award } from 'lucide-react';
 import api from '@/lib/api';
 
 interface PlayerRank {
-    id: number;
+    id: string;
     username: string;
     rank_score: number;
 }
