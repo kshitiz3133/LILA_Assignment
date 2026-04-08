@@ -20,6 +20,7 @@ interface AuthContextType {
     token: string | null;
     login: (token: string, userData: User) => void;
     logout: () => void;
+    refreshUser: () => Promise<void>;
     loading: boolean;
 }
 
@@ -87,8 +88,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push('/login');
     };
 
+    const refreshUser = async () => {
+        if (!token) return;
+        try {
+            const res = await api.get('/auth/me');
+            setUser(res.data.player);
+            localStorage.setItem('user', JSON.stringify(res.data.player));
+        } catch (e) {
+            console.error('Refresh user error');
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, token, login, logout, refreshUser, loading }}>
             {children}
         </AuthContext.Provider>
     );

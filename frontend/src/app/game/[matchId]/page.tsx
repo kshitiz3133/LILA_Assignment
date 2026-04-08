@@ -19,7 +19,7 @@ export default function GamePage({ params }: { params: any }) {
     const unwrappedParams = React.use(params) as { matchId: string };
     const matchId = unwrappedParams.matchId;
 
-    const { user, token } = useAuth();
+    const { user, token, refreshUser } = useAuth();
     const router = useRouter();
 
     const [board, setBoard] = useState<(string | null)[]>(Array(9).fill(null));
@@ -124,6 +124,7 @@ export default function GamePage({ params }: { params: any }) {
 
         if (data.status === 'finished') {
             setStatus('finished');
+            refreshUser();
             // Build game over result from REST or WS data
             if (data.winnerId !== undefined || data.result) {
                 setGameOverResult(prev => {
@@ -226,6 +227,7 @@ export default function GamePage({ params }: { params: any }) {
                         // If this move ended the game, show game over immediately
                         if (data.gameOver) {
                             setStatus('finished');
+                            refreshUser();
                             setGameOverResult({
                                 result: data.result,
                                 winnerId: data.winnerId,
@@ -247,6 +249,7 @@ export default function GamePage({ params }: { params: any }) {
                         break;
                     case 'game_over':
                         setStatus('finished');
+                        refreshUser();
                         if (data.board) setBoard(normalizeBoard(data.board));
                         setGameOverResult({
                             result: data.result,
