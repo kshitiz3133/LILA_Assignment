@@ -24,20 +24,6 @@ async function handleDisconnect(playerId) {
   const match = await Match.findByPk(room.matchId);
   if (!match || ['finished', 'waiting'].includes(match.status)) return;
 
-  // Abort instantly if match was still waiting for the other player to connect
-  if (match.status === 'started') {
-    const { applyForfeit } = require('../services/game');
-    const { result, winnerId } = await applyForfeit(match, playerId, 'forfeit');
-    broadcast(room.matchId, {
-      type: 'game_over',
-      result,
-      winnerId,
-      reason: 'forfeit',
-    });
-    destroyRoom(room.matchId);
-    return;
-  }
-
   // Notify opponent
   const opponentId = room.playerXId === playerId ? room.playerOId : room.playerXId;
   sendTo(opponentId, {

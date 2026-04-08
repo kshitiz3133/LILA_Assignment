@@ -51,9 +51,23 @@ export default function GamePage({ params }: { params: any }) {
     const statusRef = useRef(status);
     const userRef = useRef(user);
     const mySymbolRef = useRef(mySymbol);
+    const matchIdRef = useRef(matchId);
+
     statusRef.current = status;
     userRef.current = user;
     mySymbolRef.current = mySymbol;
+    matchIdRef.current = matchId;
+
+    // Reset state when matchId changes (prevents modal leakage)
+    useEffect(() => {
+        setBoard(Array(9).fill(null));
+        setStatus('connecting');
+        setCurrentTurn('');
+        setMySymbol(null);
+        setGameOverResult(null);
+        setError('');
+        setShowForfeitModal(false);
+    }, [matchId]);
 
     function fireConfetti() {
         const duration = 3000;
@@ -91,6 +105,13 @@ export default function GamePage({ params }: { params: any }) {
 
     // Apply match data from any source (WS or REST)
     function applyMatchData(data: any) {
+        // ID Validation: ignore data from stale/different matches
+        const incomingId = data.matchId || data.id;
+        if (incomingId && String(incomingId) !== String(matchIdRef.current)) {
+            console.warn("[Sync] Ignoring data for different matchId:", incomingId);
+            return;
+        }
+
         const u = userRef.current;
         if (data.player_x_id && u) {
             if (data.player_x_id === u.id) setMySymbol('X');
@@ -167,7 +188,16 @@ export default function GamePage({ params }: { params: any }) {
             const ws = new WebSocket(`${WS_BACKEND_BASEURL}/game?token=${token}`);
             wsRef.current = ws;
 
+            // Connection Timeout: if not open in 3.5s, start polling
+            const connTimeout = setTimeout(() => {
+                if (ws.readyState !== WebSocket.OPEN) {
+                    console.log("[WS] Connection timeout, falling back to polling");
+                    startPolling();
+                }
+            }, 3500);
+
             ws.onopen = () => {
+                clearTimeout(connTimeout);
                 console.log('[WS] Connected, sending join_match');
                 stopPolling();
                 ws.send(JSON.stringify({ type: 'join_match', matchId }));
@@ -381,31 +411,28 @@ export default function GamePage({ params }: { params: any }) {
                                     initial={{ opacity: 0, scale: 0.8, y: 40 }}
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                     transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-                                    className={`w-full max-w-md rounded-3xl p-8 text-center shadow-2xl border-2 relative overflow-hidden ${
-                                        isWin
-                                            ? 'bg-gradient-to-b from-dark-800 to-dark-900 border-brand-500/50 shadow-[0_0_80px_rgba(139,92,246,0.3)]'
-                                            : isDraw
+                                    className={`w-full max-w-md rounded-3xl p-8 text-center shadow-2xl border-2 relative overflow-hidden ${isWin
+                                        ? 'bg-gradient-to-b from-dark-800 to-dark-900 border-brand-500/50 shadow-[0_0_80px_rgba(139,92,246,0.3)]'
+                                        : isDraw
                                             ? 'bg-gradient-to-b from-dark-800 to-dark-900 border-yellow-500/40 shadow-[0_0_60px_rgba(245,158,11,0.2)]'
                                             : 'bg-gradient-to-b from-dark-800 to-dark-900 border-error/40 shadow-[0_0_60px_rgba(239,68,68,0.2)]'
-                                    }`}
+                                        }`}
                                 >
                                     {/* Glow effect */}
-                                    <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full blur-3xl opacity-20 ${
-                                        isWin ? 'bg-brand-500' : isDraw ? 'bg-yellow-500' : 'bg-error'
-                                    }`} />
+                                    <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full blur-3xl opacity-20 ${isWin ? 'bg-brand-500' : isDraw ? 'bg-yellow-500' : 'bg-error'
+                                        }`} />
 
                                     {/* Icon */}
                                     <motion.div
                                         initial={{ scale: 0, rotate: -180 }}
                                         animate={{ scale: 1, rotate: 0 }}
                                         transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.2 }}
-                                        className={`relative mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-5 ${
-                                            isWin
-                                                ? 'bg-brand-500/20 ring-2 ring-brand-500/40'
-                                                : isDraw
+                                        className={`relative mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-5 ${isWin
+                                            ? 'bg-brand-500/20 ring-2 ring-brand-500/40'
+                                            : isDraw
                                                 ? 'bg-yellow-500/20 ring-2 ring-yellow-500/40'
                                                 : 'bg-error/20 ring-2 ring-error/40'
-                                        }`}
+                                            }`}
                                     >
                                         {isWin && <Crown className="w-10 h-10 text-brand-400" />}
                                         {isDraw && <Minus className="w-10 h-10 text-yellow-400" />}
@@ -417,9 +444,8 @@ export default function GamePage({ params }: { params: any }) {
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: 0.3 }}
-                                        className={`text-4xl font-black mb-1 ${
-                                            isWin ? 'text-brand-400' : isDraw ? 'text-yellow-400' : 'text-error'
-                                        }`}
+                                        className={`text-4xl font-black mb-1 ${isWin ? 'text-brand-400' : isDraw ? 'text-yellow-400' : 'text-error'
+                                            }`}
                                     >
                                         {isWin ? 'Victory!' : isDraw ? 'Draw!' : 'Defeat'}
                                     </motion.h3>
@@ -470,10 +496,9 @@ export default function GamePage({ params }: { params: any }) {
                                                         <span className="text-xs text-gray-400">ELO {gameOverResult.players.X.rank}</span>
                                                     </div>
                                                     {gameOverResult.rankChanges && (
-                                                        <p className={`text-lg font-black mt-1 ${
-                                                            gameOverResult.rankChanges[gameOverResult.players.X.id] > 0 ? 'text-success' :
+                                                        <p className={`text-lg font-black mt-1 ${gameOverResult.rankChanges[gameOverResult.players.X.id] > 0 ? 'text-success' :
                                                             gameOverResult.rankChanges[gameOverResult.players.X.id] < 0 ? 'text-error' : 'text-gray-400'
-                                                        }`}>
+                                                            }`}>
                                                             {gameOverResult.rankChanges[gameOverResult.players.X.id] > 0 ? '+' : ''}
                                                             {gameOverResult.rankChanges[gameOverResult.players.X.id]}
                                                         </p>
@@ -495,10 +520,9 @@ export default function GamePage({ params }: { params: any }) {
                                                         <span className="text-xs text-gray-400">ELO {gameOverResult.players.O.rank}</span>
                                                     </div>
                                                     {gameOverResult.rankChanges && (
-                                                        <p className={`text-lg font-black mt-1 ${
-                                                            gameOverResult.rankChanges[gameOverResult.players.O.id] > 0 ? 'text-success' :
+                                                        <p className={`text-lg font-black mt-1 ${gameOverResult.rankChanges[gameOverResult.players.O.id] > 0 ? 'text-success' :
                                                             gameOverResult.rankChanges[gameOverResult.players.O.id] < 0 ? 'text-error' : 'text-gray-400'
-                                                        }`}>
+                                                            }`}>
                                                             {gameOverResult.rankChanges[gameOverResult.players.O.id] > 0 ? '+' : ''}
                                                             {gameOverResult.rankChanges[gameOverResult.players.O.id]}
                                                         </p>
