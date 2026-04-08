@@ -81,7 +81,27 @@ export default function Dashboard() {
     }
   };
 
-  if (!user) return null;
+  if (!user || user.current_match_id) {
+    return (
+      <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-6"
+        >
+          <div className="relative w-16 h-16">
+            <div className="absolute inset-0 border-4 border-brand-500/20 rounded-full" />
+            <div className="absolute inset-0 border-4 border-t-brand-500 rounded-full animate-spin" />
+            <Swords className="w-6 h-6 text-brand-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-xl font-bold text-white mb-1">Entering Arena</h2>
+            <p className="text-gray-400 text-sm animate-pulse italic">Synchronizing battle state...</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
