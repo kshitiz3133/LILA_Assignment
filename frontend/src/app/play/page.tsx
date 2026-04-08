@@ -9,9 +9,10 @@ import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const router = useRouter();
   const [matchmaking, setMatchmaking] = useState(false);
+  const [foundMatchId, setFoundMatchId] = useState<string | null>(null);
   const [mode, setMode] = useState<'classic' | 'timed'>('classic');
   const [error, setError] = useState('');
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const findMatch = async () => {
     if (!user) return;
     setMatchmaking(true);
+    setFoundMatchId(null);
     setError('');
 
     try {
@@ -40,6 +42,8 @@ export default function Dashboard() {
       const { status, matchId } = res.data;
 
       if (status === 'matched') {
+        setFoundMatchId(matchId);
+        refreshUser(); // Sync global state
         router.push(`/game/${matchId}`);
       } else {
         // Poll for match
@@ -59,7 +63,9 @@ export default function Dashboard() {
         const res = await api.get('/matchmaking/status');
         if (res.data.status === 'matched') {
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          setFoundMatchId(res.data.matchId);
           setMatchmaking(false);
+          refreshUser(); // Sync global state
           router.push(`/game/${res.data.matchId}`);
         }
       } catch {
@@ -81,7 +87,7 @@ export default function Dashboard() {
     }
   };
 
-  if (!user || user.current_match_id) {
+  if (!user || user.current_match_id || foundMatchId) {
     return (
       <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-4">
         <motion.div
@@ -182,7 +188,7 @@ export default function Dashboard() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setMode('timed')}
-              className={`cursor-pointer rounded-3xl p-6 border-2 transition-all duration-300 outline-none ${mode === 'timed' ? 'bg-dark-800 border-brand-500 shadow-[0_0_30px_rgba(139,92,246,0.2)]' : 'bg-dark-900 border-dark-400 hover:border-brand-500/50'}`}
+              className={`cursor-pointer rounded-3xl p-6 border-2 transition-all duration-300 outline-none ${mode === 'timed' ? 'bg-dark-800 border-error shadow-[0_0_30px_rgba(239,68,68,0.2)]' : 'bg-dark-900 border-dark-400 hover:border-error/50'}`}
             >
               <div className="flex h-12 w-12 rounded-full bg-error/10 items-center justify-center mb-4 text-error">
                 <Clock className="w-6 h-6" />
@@ -192,7 +198,7 @@ export default function Dashboard() {
 
               <button
                 onClick={(e) => { e.stopPropagation(); setMode('timed'); findMatch(); }}
-                className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${mode === 'timed' ? 'bg-brand-600 text-white hover:bg-brand-500 shadow-lg' : 'bg-dark-400 text-gray-400 hover:text-white'}`}
+                className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${mode === 'timed' ? 'bg-error text-white hover:bg-error/90 shadow-lg shadow-error/20' : 'bg-dark-400 text-gray-400 hover:text-white'}`}
               >
                 <Play className="w-4 h-4 fill-current" />
                 Play Blitz

@@ -6,7 +6,7 @@ import GameBoard from '@/components/GameBoard';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, AlertCircle, ArrowLeft, Loader2, Users, Crown, Minus, Frown, Swords } from 'lucide-react';
+import { Trophy, AlertCircle, ArrowLeft, Loader2, Users, Crown, Minus, Frown, Swords, Clock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import Link from 'next/link';
 import React from 'react';
@@ -284,6 +284,7 @@ export default function GamePage({ params }: { params: any }) {
                         setTimeout(() => setError(''), 3000);
                         break;
                     case 'timer_update':
+                        console.log("[Timer Update]", data.secondsLeft);
                         setSecondsLeft(data.secondsLeft);
                         break;
                     case 'error':
@@ -399,14 +400,14 @@ export default function GamePage({ params }: { params: any }) {
                             {status === 'disconnected' && 'Disconnected'}
                             {status === 'finished' && 'Game Over'}
                         </span>
-                        {secondsLeft !== null && status === 'playing' && (
+                        {secondsLeft !== null && (status === 'playing' || status === 'connecting') && (
                             <motion.span
                                 key={secondsLeft}
                                 initial={{ scale: 1.2, color: secondsLeft <= 3 ? '#ef4444' : '#fff' }}
                                 animate={{ scale: 1, color: secondsLeft <= 3 ? '#ef4444' : '#fff' }}
                                 className={`px-4 py-1.5 rounded-full text-sm font-black border ${secondsLeft <= 3 ? 'bg-error/10 border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-dark-800 border-dark-400 text-white'}`}
                             >
-                                {secondsLeft}s
+                                <Clock className="w-3 h-3 inline mr-1" /> {secondsLeft}s
                             </motion.span>
                         )}
                     </div>
