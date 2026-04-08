@@ -165,8 +165,11 @@ export default function Dashboard() {
             <motion.div
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onMouseEnter={() => setMode('classic')}
               onClick={() => setMode('classic')}
-              className={`cursor-pointer rounded-3xl p-6 border-2 transition-all duration-300 outline-none ${mode === 'classic' ? 'bg-dark-800 border-brand-500 shadow-[0_0_30px_rgba(139,92,246,0.2)]' : 'bg-dark-900 border-dark-400 hover:border-brand-500/50'}`}
+              className={`cursor-pointer rounded-3xl p-6 border-2 transition-all duration-300 outline-none 
+                ${mode === 'classic' ? 'bg-dark-800 border-brand-500 shadow-[0_0_30px_rgba(139,92,246,0.2)]' : 'bg-dark-900 border-dark-400 hover:border-brand-500/50'}
+                max-sm:bg-dark-800 max-sm:border-brand-500/50`}
             >
               <div className="flex h-12 w-12 rounded-full bg-blue-500/10 items-center justify-center mb-4 text-blue-500">
                 <User className="w-6 h-6" />
@@ -187,8 +190,11 @@ export default function Dashboard() {
             <motion.div
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onMouseEnter={() => setMode('timed')}
               onClick={() => setMode('timed')}
-              className={`cursor-pointer rounded-3xl p-6 border-2 transition-all duration-300 outline-none ${mode === 'timed' ? 'bg-dark-800 border-error shadow-[0_0_30px_rgba(239,68,68,0.2)]' : 'bg-dark-900 border-dark-400 hover:border-error/50'}`}
+              className={`cursor-pointer rounded-3xl p-6 border-2 transition-all duration-300 outline-none 
+                ${mode === 'timed' ? 'bg-dark-800 border-error shadow-[0_0_30px_rgba(239,68,68,0.2)]' : 'bg-dark-900 border-dark-400 hover:border-error/50'}
+                max-sm:bg-dark-800 max-sm:border-error/50`}
             >
               <div className="flex h-12 w-12 rounded-full bg-error/10 items-center justify-center mb-4 text-error">
                 <Clock className="w-6 h-6" />

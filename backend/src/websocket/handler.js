@@ -165,13 +165,14 @@ async function handleJoinMatch(ws, player, msg) {
     currentTurn,
     lastMovedAt,
     status: (match.status === 'started' && bothConnected) ? 'active' : match.status,
-    symbol
+    symbol,
+    gameMode: match.game_mode
   });
 
   // If transition just triggered, broadcast to everyone
   if (match.status === 'started' && bothConnected) {
     await match.update({ status: 'active' });
-    broadcast(matchId, { type: 'game_started', board: match.board, currentTurn, lastMovedAt });
+    broadcast(matchId, { type: 'game_started', board: match.board, currentTurn, lastMovedAt, gameMode: match.game_mode });
 
     // Start timer for the first player if timed mode
     if (match.game_mode === 'timed') {

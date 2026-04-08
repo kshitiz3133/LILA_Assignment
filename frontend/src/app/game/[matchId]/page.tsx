@@ -123,6 +123,7 @@ export default function GamePage({ params }: { params: any }) {
         if (data.board) setBoard(normalizeBoard(data.board));
         if (data.currentTurn) setCurrentTurn(data.currentTurn);
         if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
+        if (data.gameMode) setGameMode(data.gameMode);
 
         if (data.status === 'finished') {
             setStatus('finished');
@@ -219,6 +220,7 @@ export default function GamePage({ params }: { params: any }) {
                     case 'game_started':
                         setStatus('playing');
                         setSecondsLeft(null);
+                        if (data.gameMode) setGameMode(data.gameMode);
                         if (data.board) setBoard(normalizeBoard(data.board));
                         if (data.currentTurn) setCurrentTurn(data.currentTurn);
                         if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
@@ -393,6 +395,9 @@ export default function GamePage({ params }: { params: any }) {
                         <span className={`px-4 py-1.5 rounded-full text-sm font-bold border flex items-center gap-2 ${mySymbol === 'X' ? 'bg-brand-500/10 border-brand-500/50 text-brand-400' : 'bg-success/10 border-success/50 text-success'}`}>
                             <Users className="w-4 h-4" /> You play as {mySymbol || '?'}
                         </span>
+                        <span className={`px-4 py-1.5 rounded-full text-sm font-bold border ${gameMode === 'timed' ? 'bg-error/10 border-error/50 text-error' : 'bg-blue-500/10 border-blue-500/50 text-blue-400'}`}>
+                            {gameMode === 'timed' ? 'BLITZ' : 'CLASSIC'}
+                        </span>
                         <span className={`px-4 py-1.5 rounded-full text-sm font-bold border ${status === 'playing' ? 'bg-blue-500/10 border-blue-500/50 text-blue-400' : status === 'waiting' ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-400' : 'bg-dark-800 border-dark-400 text-gray-400'}`}>
                             {status === 'connecting' && 'Connecting...'}
                             {status === 'waiting' && 'Waiting for opponent...'}
@@ -400,14 +405,14 @@ export default function GamePage({ params }: { params: any }) {
                             {status === 'disconnected' && 'Disconnected'}
                             {status === 'finished' && 'Game Over'}
                         </span>
-                        {secondsLeft !== null && (status === 'playing' || status === 'connecting') && (
+                        {gameMode === 'timed' && (status === 'playing' || status === 'connecting') && (
                             <motion.span
-                                key={secondsLeft}
-                                initial={{ scale: 1.2, color: secondsLeft <= 3 ? '#ef4444' : '#fff' }}
-                                animate={{ scale: 1, color: secondsLeft <= 3 ? '#ef4444' : '#fff' }}
-                                className={`px-4 py-1.5 rounded-full text-sm font-black border ${secondsLeft <= 3 ? 'bg-error/10 border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-dark-800 border-dark-400 text-white'}`}
+                                key={secondsLeft ?? 'waiting'}
+                                initial={{ scale: 1.2, color: (secondsLeft !== null && secondsLeft <= 3) ? '#ef4444' : '#fff' }}
+                                animate={{ scale: 1, color: (secondsLeft !== null && secondsLeft <= 3) ? '#ef4444' : '#fff' }}
+                                className={`px-4 py-1.5 rounded-full text-sm font-black border ${(secondsLeft !== null && secondsLeft <= 3) ? 'bg-error/10 border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-dark-800 border-dark-400 text-white'}`}
                             >
-                                <Clock className="w-3 h-3 inline mr-1" /> {secondsLeft}s
+                                <Clock className="w-3 h-3 inline mr-1" /> {secondsLeft !== null ? `${secondsLeft}s` : '--s'}
                             </motion.span>
                         )}
                     </div>
