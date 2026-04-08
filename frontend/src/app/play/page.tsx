@@ -179,7 +179,9 @@ export default function Dashboard() {
 
               <button
                 onClick={(e) => { e.stopPropagation(); setMode('classic'); findMatch(); }}
-                className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${mode === 'classic' ? 'bg-brand-600 text-white hover:bg-brand-500 shadow-lg' : 'bg-dark-400 text-gray-400 hover:text-white'}`}
+                className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all 
+                  ${mode === 'classic' ? 'bg-brand-600 text-white hover:bg-brand-500 shadow-lg' : 'bg-dark-400 text-gray-400 hover:text-white'}
+                  max-sm:bg-brand-600 max-sm:text-white`}
               >
                 <Play className="w-4 h-4 fill-current" />
                 Play Standard
@@ -204,7 +206,9 @@ export default function Dashboard() {
 
               <button
                 onClick={(e) => { e.stopPropagation(); setMode('timed'); findMatch(); }}
-                className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${mode === 'timed' ? 'bg-error text-white hover:bg-error/90 shadow-lg shadow-error/20' : 'bg-dark-400 text-gray-400 hover:text-white'}`}
+                className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all 
+                  ${mode === 'timed' ? 'bg-error text-white hover:bg-error/90 shadow-lg shadow-error/20' : 'bg-dark-400 text-gray-400 hover:text-white'}
+                  max-sm:bg-error max-sm:text-white`}
               >
                 <Play className="w-4 h-4 fill-current" />
                 Play Blitz
