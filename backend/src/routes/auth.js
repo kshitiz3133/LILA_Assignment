@@ -17,24 +17,32 @@ router.post(['/register', '/login'], async (req, res) => {
 
   const { username } = value;
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const userAgent = req.headers['user-agent'] || 'unknown';
 
   try {
     // Check if username already taken
     let player = await Player.findOne({ where: { username } });
 
     if (player) {
-      // If it exists, verify IP
-      if (player.ip_address && player.ip_address !== clientIp) {
-        return res.status(401).json({ error: 'This username is registered to another device/IP.' });
+      // Identity Check: Allow if EITHER IP or User-Agent matches (flexibility for multi-network setups)
+      const ipMatch = player.ip_address === clientIp;
+      const agentMatch = player.user_agent === userAgent;
+
+      if (player.ip_address && !ipMatch && !agentMatch) {
+         return res.status(401).json({ 
+           error: 'This username is already bound to a different device or network setup.' 
+         });
       }
-      // If ip_address is null (old account), bind it now
-      if (!player.ip_address) {
+      
+      // Update binding if one changed but the other confirmed identity
+      if (ipMatch || agentMatch) {
         player.ip_address = clientIp;
+        player.user_agent = userAgent;
         await player.save();
       }
     } else {
       // Create new bound account
-      player = await Player.create({ username, ip_address: clientIp });
+      player = await Player.create({ username, ip_address: clientIp, user_agent: userAgent });
     }
 
     const token = jwt.sign(

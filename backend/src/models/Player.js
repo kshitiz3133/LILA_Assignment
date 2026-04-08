@@ -16,6 +16,10 @@ const Player = sequelize.define('Player', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  user_agent: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
   rank: {
     type: DataTypes.INTEGER,
     defaultValue: 1000,
