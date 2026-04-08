@@ -54,13 +54,19 @@ export default function ProfilePage() {
                             <Trophy className="w-48 h-48 -mr-10 -mt-10" />
                         </div>
 
-                        <div className="text-left col-span-2 mb-2">
-                            <h3 className="text-xl font-bold text-gray-200">Current Rank</h3>
-                            <div className="flex items-end gap-3 mt-1">
-                                <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-brand-300">
+                        <div className="col-span-2 mb-4">
+                            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+                                Current Rank
+                            </h3>
+
+                            <div className="flex items-end gap-2 mt-2">
+                                <span className="text-5xl font-extrabold leading-none bg-gradient-to-r from-brand-400 to-brand-300 bg-clip-text text-transparent">
                                     {user.rank}
                                 </span>
-                                <span className="text-brand-500 font-bold mb-1 uppercase tracking-wider text-sm">{user.rank} ELO</span>
+
+                                <span className="text-sm font-semibold text-brand-400 mb-1">
+                                    ELO
+                                </span>
                             </div>
                         </div>
 
