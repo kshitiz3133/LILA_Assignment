@@ -24,12 +24,28 @@ export default function Dashboard() {
     }
   }, [user, router]);
 
-  // Auto-cleanup polling on unmount
+  // Auto-resume matchmaking on refresh if already searching
   useEffect(() => {
+    const checkStatus = async () => {
+      if (!user) return;
+      try {
+        const res = await api.get('/matchmaking/status');
+        if (res.data.status === 'searching') {
+          setMode(res.data.mode);
+          setMatchmaking(true);
+          pollMatchmaking();
+        }
+      } catch (err) {
+        console.error('Initial status check failed');
+      }
+    };
+
+    checkStatus();
+
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, []);
+  }, [user]); // Re-run when user context is available
 
   const findMatch = async () => {
     if (!user) return;

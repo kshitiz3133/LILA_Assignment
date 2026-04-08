@@ -60,8 +60,10 @@ router.get('/status', auth, async (req, res) => {
 
   if (freshPlayer.current_match_id) {
     return res.json({ status: 'matched', matchId: freshPlayer.current_match_id });
+  } else if (freshPlayer.search_started_at) {
+    return res.json({ status: 'searching', mode: freshPlayer.search_mode });
   } else {
-    return res.json({ status: 'searching' });
+    return res.json({ status: 'idle' });
   }
 });
 
