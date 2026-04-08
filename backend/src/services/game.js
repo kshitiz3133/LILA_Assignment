@@ -64,6 +64,15 @@ async function applyMove(match, playerId, cell) {
     return { ok: false, reason: 'Not your turn' };
   }
 
+  // BLITZ MODE: Hard timestamp check
+  if (match.game_mode === 'timed') {
+    const baseline = opponentTime || new Date(match.created_at).getTime();
+    const elapsed = Date.now() - baseline;
+    if (elapsed > 12000) { // 12s hard limit
+      return { ok: false, reason: 'Turn timeout' };
+    }
+  }
+
   // Validate cell range
   if (cell < 0 || cell > 8) {
     return { ok: false, reason: 'Invalid cell index' };

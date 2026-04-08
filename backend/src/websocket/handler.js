@@ -172,6 +172,11 @@ async function handleJoinMatch(ws, player, msg) {
   if (match.status === 'started' && bothConnected) {
     await match.update({ status: 'active' });
     broadcast(matchId, { type: 'game_started', board: match.board, currentTurn, lastMovedAt });
+
+    // Start timer for the first player if timed mode
+    if (match.game_mode === 'timed') {
+      startTurnTimer(matchId, match.player_x_id);
+    }
   }
 }
 

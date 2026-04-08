@@ -10,7 +10,8 @@ const { Match } = require('../models');
 const { applyForfeit } = require('./game');
 const { broadcast, destroyRoom, getRoom } = require('../websocket/rooms');
 
-const TURN_LIMIT_MS = 30 * 1000;
+const TURN_LIMIT_MS = 10 * 1000; // 10s displayed to user
+const FORFEIT_TOLERANCE_MS = 12 * 1000; // 12s hard limit for the backend (2s buffer)
 
 function startTurnTimer(matchId, currentPlayerId) {
   const room = getRoom(matchId);
@@ -22,15 +23,20 @@ function startTurnTimer(matchId, currentPlayerId) {
     room.timerRef = null;
   }
 
-  const deadline = Date.now() + TURN_LIMIT_MS;
-  let secondsLeft = 30;
+  const startedAt = Date.now();
+  const deadline = startedAt + TURN_LIMIT_MS;
+  const hardDeadline = startedAt + FORFEIT_TOLERANCE_MS;
 
   room.timerRef = setInterval(async () => {
-    secondsLeft = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    const now = Date.now();
+    const secondsLeft = Math.max(0, Math.ceil((deadline - now) / 1000));
+    
+    // Only broadcast updates while within the 10s display window
+    if (now <= deadline + 1000) {
+      broadcast(matchId, { type: 'timer_update', secondsLeft });
+    }
 
-    broadcast(matchId, { type: 'timer_update', secondsLeft });
-
-    if (secondsLeft <= 0) {
+    if (now >= hardDeadline) {
       clearInterval(room.timerRef);
       room.timerRef = null;
 

@@ -42,6 +42,8 @@ export default function GamePage({ params }: { params: any }) {
     const [lastMovedAt, setLastMovedAt] = useState<{ X: string | null; O: string | null }>({ X: null, O: null });
     const [error, setError] = useState<string>('');
     const [showForfeitModal, setShowForfeitModal] = useState(false);
+    const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+    const [gameMode, setGameMode] = useState<string>('classic');
 
     console.log("[Game State]", { status, currentTurn, mySymbol, isMyTurn: status === 'playing' && currentTurn === mySymbol });
 
@@ -124,6 +126,7 @@ export default function GamePage({ params }: { params: any }) {
 
         if (data.status === 'finished') {
             setStatus('finished');
+            setSecondsLeft(null);
             refreshUser();
             // Build game over result from REST or WS data
             if (data.winnerId !== undefined || data.result) {
@@ -210,10 +213,12 @@ export default function GamePage({ params }: { params: any }) {
 
                 switch (data.type) {
                     case 'joined_match':
+                        setSecondsLeft(null);
                         applyMatchData(data);
                         break;
                     case 'game_started':
                         setStatus('playing');
+                        setSecondsLeft(null);
                         if (data.board) setBoard(normalizeBoard(data.board));
                         if (data.currentTurn) setCurrentTurn(data.currentTurn);
                         if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
@@ -243,6 +248,7 @@ export default function GamePage({ params }: { params: any }) {
                         break;
                     case 'board_update':
                         if (ackTimerRef.current) { clearTimeout(ackTimerRef.current); ackTimerRef.current = null; }
+                        setSecondsLeft(null);
                         setBoard(normalizeBoard(data.board));
                         setCurrentTurn(data.currentTurn);
                         if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
@@ -276,6 +282,9 @@ export default function GamePage({ params }: { params: any }) {
                         if (token) fetchMatchState(token);
                         setError(data.reason || 'Move rejected');
                         setTimeout(() => setError(''), 3000);
+                        break;
+                    case 'timer_update':
+                        setSecondsLeft(data.secondsLeft);
                         break;
                     case 'error':
                         setError(data.message || 'An error occurred');
@@ -390,6 +399,16 @@ export default function GamePage({ params }: { params: any }) {
                             {status === 'disconnected' && 'Disconnected'}
                             {status === 'finished' && 'Game Over'}
                         </span>
+                        {secondsLeft !== null && status === 'playing' && (
+                            <motion.span
+                                key={secondsLeft}
+                                initial={{ scale: 1.2, color: secondsLeft <= 3 ? '#ef4444' : '#fff' }}
+                                animate={{ scale: 1, color: secondsLeft <= 3 ? '#ef4444' : '#fff' }}
+                                className={`px-4 py-1.5 rounded-full text-sm font-black border ${secondsLeft <= 3 ? 'bg-error/10 border-error/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'bg-dark-800 border-dark-400 text-white'}`}
+                            >
+                                {secondsLeft}s
+                            </motion.span>
+                        )}
                     </div>
                 </div>
 
