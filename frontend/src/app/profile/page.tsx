@@ -58,15 +58,8 @@ export default function ProfilePage() {
                             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
                                 Current Rank
                             </h3>
-
                             <div className="flex items-end gap-2 mt-2">
-                                <span className="text-5xl font-extrabold leading-none bg-gradient-to-r from-brand-400 to-brand-300 bg-clip-text text-transparent">
-                                    {user.rank}
-                                </span>
-
-                                <span className="text-sm font-semibold text-brand-400 mb-1">
-                                    ELO
-                                </span>
+                                <span className="text-brand-500 font-bold mb-1 uppercase tracking-wider text-sm">{user.rank} ELO</span>
                             </div>
                         </div>
 
