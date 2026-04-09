@@ -4,7 +4,7 @@ import { Client } from "@heroiclabs/nakama-js";
 const serverKey = process.env.NEXT_PUBLIC_NAKAMA_SERVER_KEY || "default_server_key";
 const host = process.env.NEXT_PUBLIC_NAKAMA_HOST || "127.0.0.1";
 const port = process.env.NEXT_PUBLIC_NAKAMA_PORT || "7350";
-const useSSL = process.env.NEXT_PUBLIC_NAKAMA_USE_SSL === "true";
+export const useSSL = process.env.NEXT_PUBLIC_NAKAMA_USE_SSL === "true";
 
 const client = new Client(serverKey, host, port, useSSL);
 

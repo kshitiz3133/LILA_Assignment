@@ -7,7 +7,7 @@ import { Swords, Clock, User, Loader2, Play } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import client from '@/lib/nakama';
+import client, { useSSL } from '@/lib/nakama';
 
 export default function Dashboard() {
   const { user, session, refreshUser } = useAuth();
@@ -25,7 +25,7 @@ export default function Dashboard() {
     if (!session) return;
 
     const initSocket = async () => {
-      const socket = client.createSocket(false, false);
+      const socket = client.createSocket(useSSL, false);
       socket.onmatchmakermatched = (matched: any) => {
         const matchId = matched.match_id;
         setTicket(null);

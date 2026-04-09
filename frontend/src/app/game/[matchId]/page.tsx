@@ -10,7 +10,7 @@ import { Trophy, AlertCircle, ArrowLeft, Loader2, Users, Crown, Minus, Frown, Sw
 import confetti from 'canvas-confetti';
 import Link from 'next/link';
 import React from 'react';
-import client from '@/lib/nakama';
+import client, { useSSL } from '@/lib/nakama';
 import api from '@/lib/api';
 
 // Next.js App router specific page generic
@@ -68,7 +68,7 @@ export default function GamePage({ params }: { params: any }) {
 
         const connectToMatch = async (retries = 3): Promise<void> => {
             try {
-                const socket = client.createSocket(false, false);
+                const socket = client.createSocket(useSSL, false);
                 socket.onmatchdata = (state: any) => {
                     const data = JSON.parse(new TextDecoder().decode(state.data));
                     console.log("[MatchData]", state.op_code, data);
