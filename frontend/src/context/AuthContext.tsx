@@ -121,6 +121,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Nakama is always authenticated via device in this flow
             if (user && (pathname.includes('/login') || pathname.includes('/register') || pathname === '/')) {
                 router.push('/profile');
+            } else if (!user && pathname === '/') {
+                router.push('/login');
             }
         }
     }, [user, loading, pathname, router]);
