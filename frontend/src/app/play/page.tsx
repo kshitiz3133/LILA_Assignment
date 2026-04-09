@@ -7,103 +7,99 @@ import { Swords, Clock, User, Loader2, Play } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import client from '@/lib/nakama';
 
 export default function Dashboard() {
-  const { user, refreshUser } = useAuth();
+  const { user, session, refreshUser } = useAuth();
   const router = useRouter();
   const [matchmaking, setMatchmaking] = useState(false);
-  const [foundMatchId, setFoundMatchId] = useState<string | null>(null);
+  const [matchFound, setMatchFound] = useState(false);
+  const [ticket, setTicket] = useState<string | null>(null);
   const [mode, setMode] = useState<'classic' | 'timed'>('classic');
   const [error, setError] = useState('');
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [searchTime, setSearchTime] = useState(0);
+  const socketRef = useRef<any>(null);
 
-  // Eject user if trying to queue while actively matched
+  // Initialize socket
   useEffect(() => {
-    if (user?.current_match_id) {
-      router.replace(`/game/${user.current_match_id}`);
-    }
-  }, [user, router]);
+    if (!session) return;
 
-  // Auto-resume matchmaking on refresh if already searching
-  useEffect(() => {
-    const checkStatus = async () => {
-      if (!user) return;
-      try {
-        const res = await api.get('/matchmaking/status');
-        if (res.data.status === 'searching') {
-          setMode(res.data.mode);
-          setMatchmaking(true);
-          pollMatchmaking();
-        }
-      } catch (err) {
-        console.error('Initial status check failed');
-      }
+    const initSocket = async () => {
+      const socket = client.createSocket(false, false);
+      socket.onmatchmakermatched = (matched: any) => {
+        const matchId = matched.match_id;
+        setTicket(null);
+        setMatchmaking(false);
+        setMatchFound(true);
+        refreshUser();
+        router.push(`/game/${matchId}`);
+      };
+
+      await socket.connect(session, true);
+      socketRef.current = socket;
     };
 
-    checkStatus();
+    initSocket();
 
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
-  }, [user]); // Re-run when user context is available
+  }, [session]);
+
+  // Matchmaking timer
+  useEffect(() => {
+    let interval: any;
+    if (ticket) {
+      setSearchTime(0);
+      interval = setInterval(() => {
+        setSearchTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setSearchTime(0);
+    }
+    return () => clearInterval(interval);
+  }, [ticket]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const findMatch = async () => {
-    if (!user) return;
+    if (!session || !socketRef.current) return;
     setMatchmaking(true);
-    setFoundMatchId(null);
     setError('');
 
     try {
-      const res = await api.post('/matchmaking/join', { mode });
-      const { status, matchId } = res.data;
+      const query = "*"; // Any opponent
+      const minCount = 2;
+      const maxCount = 2;
+      const stringProperties = { mode };
+      const numericProperties = {};
 
-      if (status === 'matched') {
-        setFoundMatchId(matchId);
-        refreshUser(); // Sync global state
-        router.push(`/game/${matchId}`);
-      } else {
-        // Poll for match
-        pollMatchmaking();
-      }
+      const matchmakerTicket = await socketRef.current.addMatchmaker(query, minCount, maxCount, stringProperties, numericProperties);
+      setTicket(matchmakerTicket.ticket);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to start matchmaking.');
+      setError('Failed to start matchmaking.');
       setMatchmaking(false);
     }
   };
 
-  const pollMatchmaking = () => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const res = await api.get('/matchmaking/status');
-        if (res.data.status === 'matched') {
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          setFoundMatchId(res.data.matchId);
-          setMatchmaking(false);
-          refreshUser(); // Sync global state
-          router.push(`/game/${res.data.matchId}`);
-        }
-      } catch {
-        // Stop polling on error
-        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-        setMatchmaking(false);
-        setError('Matchmaking connection lost.');
-      }
-    }, 2000);
-  };
-
   const cancelMatchmaking = async () => {
+    if (!socketRef.current || !ticket) return;
     try {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      await api.delete('/matchmaking/leave');
+      await socketRef.current.removeMatchmaker(ticket);
+      setTicket(null);
       setMatchmaking(false);
     } catch (err) {
       console.error('Cancel error');
     }
   };
 
-  if (!user || user.current_match_id || foundMatchId) {
+  if (!user || (matchmaking && !ticket) || matchFound) {
     return (
       <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center p-4">
         <motion.div
@@ -166,7 +162,7 @@ export default function Dashboard() {
               <Swords className="w-10 h-10 text-brand-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-2">Searching for Opponent</h2>
-            <p className="text-gray-400 mb-8">Estimated Wait: 0:15</p>
+            <p className="text-gray-400 mb-8 select-none">Time Elapsed: {formatTime(searchTime)}</p>
 
             <button
               onClick={cancelMatchmaking}

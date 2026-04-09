@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { motion } from 'framer-motion';
 import { Loader2, Gamepad2, AlertCircle, Swords } from 'lucide-react';
-import api from '@/lib/api';
 
 export default function LoginPage() {
     const [username, setUsername] = useState('');
@@ -18,17 +17,13 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            // Try login first (existing user with same IP)
-            const res = await api.post('/auth/login', { username });
-            login(res.data.token, res.data.player);
-        } catch (loginErr: any) {
-            // If login fails, try registering as new user
-            try {
-                const res = await api.post('/auth/register', { username });
-                login(res.data.token, res.data.player);
-            } catch (registerErr: any) {
-                setError(registerErr.response?.data?.error || loginErr.response?.data?.error || 'Something went wrong. Try a different nickname.');
-            }
+            await login(username);
+            // Redirection is handled by useEffect in AuthProvider or the page structure
+        } catch (err: any) {
+            console.error("Login component error:", err);
+            // In Nakama JS, errors from Hooks might arrive differently 
+            // but usually they have a 'message' property
+            setError(err.message || 'Nickname already taken or invalid. Try another.');
         } finally {
             setIsLoading(false);
         }
@@ -82,22 +77,22 @@ export default function LoginPage() {
                                 id="username"
                                 type="text"
                                 required
-                                minLength={2}
-                                maxLength={50}
+                                minLength={3}
+                                maxLength={20}
                                 autoFocus
                                 className="w-full bg-dark-900/50 border border-dark-400 rounded-xl px-4 py-3.5 text-white text-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all duration-300"
                                 placeholder="Enter your nickname..."
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                             />
-                            <p className="text-xs text-gray-500 mt-2">Letters and numbers only. Your account is tied to this device.</p>
+                            <p className="text-xs text-gray-500 mt-2">Your account is securely tied to this device.</p>
                         </div>
 
                         <motion.button
                             whileHover={{ scale: 1.01 }}
                             whileTap={{ scale: 0.98 }}
                             type="submit"
-                            disabled={isLoading || username.length < 2}
+                            disabled={isLoading || username.length < 3}
                             className="w-full bg-brand-600 hover:bg-brand-500 text-white rounded-xl px-4 py-3.5 font-bold text-lg shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isLoading ? (

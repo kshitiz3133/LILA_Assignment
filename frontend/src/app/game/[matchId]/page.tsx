@@ -10,7 +10,7 @@ import { Trophy, AlertCircle, ArrowLeft, Loader2, Users, Crown, Minus, Frown, Sw
 import confetti from 'canvas-confetti';
 import Link from 'next/link';
 import React from 'react';
-import { BACKEND_BASEURL, WS_BACKEND_BASEURL } from '@/constants/config';
+import client from '@/lib/nakama';
 import api from '@/lib/api';
 
 // Next.js App router specific page generic
@@ -19,348 +19,167 @@ export default function GamePage({ params }: { params: any }) {
     const unwrappedParams = React.use(params) as { matchId: string };
     const matchId = unwrappedParams.matchId;
 
-    const { user, token, refreshUser } = useAuth();
+    const { user, session, refreshUser, loading } = useAuth();
     const router = useRouter();
 
     const [board, setBoard] = useState<(string | null)[]>(Array(9).fill(null));
 
     const normalizeBoard = (b: any) => {
         if (!b) return Array(9).fill(null);
-        const arr = typeof b === 'string' ? b.split('') : b;
-        return arr.map((c: string) => (c === ' ' || !c) ? null : c);
+        return b;
     };
     const [status, setStatus] = useState<string>('connecting');
     const [currentTurn, setCurrentTurn] = useState<string>('');
     const [mySymbol, setMySymbol] = useState<'X' | 'O' | null>(null);
-    const [gameOverResult, setGameOverResult] = useState<{
-        result: string;
-        winnerId?: string;
-        winnerUsername?: string;
-        players?: { X: { id: string; username: string; rank: number }; O: { id: string; username: string; rank: number } };
-        rankChanges?: any;
-    } | null>(null);
-    const [lastMovedAt, setLastMovedAt] = useState<{ X: string | null; O: string | null }>({ X: null, O: null });
+    const [gameOverResult, setGameOverResult] = useState<any>(null);
     const [error, setError] = useState<string>('');
     const [showForfeitModal, setShowForfeitModal] = useState(false);
     const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+    const [lastMoveBy, setLastMoveBy] = useState<string | null>(null);
     const [gameMode, setGameMode] = useState<string>('classic');
 
-    console.log("[Game State]", { status, currentTurn, mySymbol, isMyTurn: status === 'playing' && currentTurn === mySymbol });
-
-    const wsRef = useRef<WebSocket | null>(null);
-    const pollRef = useRef<NodeJS.Timeout | null>(null);
-    const ackTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const statusRef = useRef(status);
+    const socketRef = useRef<any>(null);
     const userRef = useRef(user);
-    const mySymbolRef = useRef(mySymbol);
-    const matchIdRef = useRef(matchId);
 
-    statusRef.current = status;
-    userRef.current = user;
-    mySymbolRef.current = mySymbol;
-    matchIdRef.current = matchId;
-
-    // Reset state when matchId changes (prevents modal leakage)
     useEffect(() => {
-        setBoard(Array(9).fill(null));
-        setStatus('connecting');
-        setCurrentTurn('');
-        setMySymbol(null);
-        setGameOverResult(null);
-        setError('');
-        setShowForfeitModal(false);
-    }, [matchId]);
+        userRef.current = user;
+    }, [user]);
+
+    const OpCode = {
+        MOVE: 1,
+        UPDATE: 2,
+        TIMER: 3,
+        GAME_OVER: 4,
+        FORFEIT: 5
+    };
 
     function fireConfetti() {
-        const duration = 3000;
-        const end = Date.now() + duration;
-
-        const frame = () => {
-            confetti({
-                particleCount: 3,
-                angle: 60,
-                spread: 55,
-                origin: { x: 0, y: 0.7 },
-                colors: ['#a78bfa', '#8b5cf6', '#10b981', '#f59e0b', '#ffffff'],
-            });
-            confetti({
-                particleCount: 3,
-                angle: 120,
-                spread: 55,
-                origin: { x: 1, y: 0.7 },
-                colors: ['#a78bfa', '#8b5cf6', '#10b981', '#f59e0b', '#ffffff'],
-            });
-            if (Date.now() < end) requestAnimationFrame(frame);
-        };
-        frame();
-
-        // Big burst in the center
-        setTimeout(() => {
-            confetti({
-                particleCount: 100,
-                spread: 100,
-                origin: { x: 0.5, y: 0.4 },
-                colors: ['#a78bfa', '#8b5cf6', '#10b981', '#f59e0b', '#ffffff'],
-            });
-        }, 300);
+        confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 }
+        });
     }
 
-    // Apply match data from any source (WS or REST)
-    function applyMatchData(data: any) {
-        // ID Validation: ignore data from stale/different matches
-        const incomingId = data.matchId || data.id;
-        if (incomingId && String(incomingId) !== String(matchIdRef.current)) {
-            console.warn("[Sync] Ignoring data for different matchId:", incomingId);
-            return;
-        }
-
-        const u = userRef.current;
-        if (data.player_x_id && u) {
-            if (data.player_x_id === u.id) setMySymbol('X');
-            else if (data.player_o_id === u.id) setMySymbol('O');
-        }
-        if (data.symbol) setMySymbol(data.symbol);
-        if (data.board) setBoard(normalizeBoard(data.board));
-        if (data.currentTurn) setCurrentTurn(data.currentTurn);
-        if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
-        if (data.gameMode || data.game_mode) setGameMode(data.gameMode || data.game_mode);
-
-        if (data.status === 'finished') {
-            setStatus('finished');
-            setSecondsLeft(null);
-            refreshUser();
-            // Build game over result from REST or WS data
-            if (data.winnerId !== undefined || data.result) {
-                setGameOverResult(prev => {
-                    // Don't overwrite if already set (WS arrived first)
-                    if (prev) return prev;
-                    return {
-                        result: data.result,
-                        winnerId: data.winnerId || data.winner_id,
-                        winnerUsername: data.winnerUsername || data.winner?.username || null,
-                        players: data.players || (data.playerX && data.playerO ? {
-                            X: { id: data.playerX.id, username: data.playerX.username, rank: data.playerX.rank },
-                            O: { id: data.playerO.id, username: data.playerO.username, rank: data.playerO.rank },
-                        } : undefined),
-                        rankChanges: data.rankChanges,
-                    };
-                });
-                // Fire confetti if we won
-                const winnerId = data.winnerId || data.winner_id;
-                if (winnerId && winnerId === u?.id) {
-                    fireConfetti();
-                }
-            }
-        } else if (data.currentTurn && data.lastMovedAt) {
-            setStatus('playing');
-        }
-    }
-
-    // REST poll: fetch latest match state
-    function fetchMatchState(tkn: string) {
-        fetch(`${BACKEND_BASEURL}/matches/${matchId}`, {
-            headers: { Authorization: `Bearer ${tkn}` }
-        })
-            .then(res => res.json())
-            .then(data => applyMatchData(data))
-            .catch(e => console.error('[Poll] fetch error', e));
-    }
-
-    // WebSocket connection with auto-reconnect + REST poll fallback
     useEffect(() => {
-        if (!token) return;
+        if (loading || !session) return;
 
-        let reconnectTimer: NodeJS.Timeout | null = null;
-        let destroyed = false;
+        let cancelled = false;
 
-        function stopPolling() {
-            if (pollRef.current) {
-                clearInterval(pollRef.current);
-                pollRef.current = null;
-            }
-        }
+        const connectToMatch = async (retries = 3): Promise<void> => {
+            try {
+                const socket = client.createSocket(false, false);
+                socket.onmatchdata = (state: any) => {
+                    const data = JSON.parse(new TextDecoder().decode(state.data));
+                    console.log("[MatchData]", state.op_code, data);
 
-        function startPolling() {
-            if (pollRef.current) return;
-            fetchMatchState(token!);
-            pollRef.current = setInterval(() => fetchMatchState(token!), 2000);
-        }
-
-        function connect() {
-            if (destroyed) return;
-            if (wsRef.current && wsRef.current.readyState <= 1) return;
-
-            const ws = new WebSocket(`${WS_BACKEND_BASEURL}/game?token=${token}`);
-            wsRef.current = ws;
-
-            // Connection Timeout: if not open in 3.5s, start polling
-            const connTimeout = setTimeout(() => {
-                if (ws.readyState !== WebSocket.OPEN) {
-                    console.log("[WS] Connection timeout, falling back to polling");
-                    startPolling();
-                }
-            }, 3500);
-
-            ws.onopen = () => {
-                clearTimeout(connTimeout);
-                console.log('[WS] Connected, sending join_match');
-                stopPolling();
-                ws.send(JSON.stringify({ type: 'join_match', matchId }));
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                console.log("[WS Message]", data);
-
-                switch (data.type) {
-                    case 'joined_match':
-                        setSecondsLeft(null);
-                        applyMatchData(data);
-                        break;
-                    case 'game_started':
-                        setStatus('playing');
-                        setSecondsLeft(null);
-                        if (data.gameMode) setGameMode(data.gameMode);
-                        if (data.board) setBoard(normalizeBoard(data.board));
-                        if (data.currentTurn) setCurrentTurn(data.currentTurn);
-                        if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
-                        break;
-                    case 'move_accepted':
-                        // Server confirmed — cancel fallback timer, apply authoritative state
-                        if (ackTimerRef.current) { clearTimeout(ackTimerRef.current); ackTimerRef.current = null; }
-                        setBoard(normalizeBoard(data.board));
-                        if (data.currentTurn) setCurrentTurn(data.currentTurn);
-                        if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
-                        // If this move ended the game, show game over immediately
-                        if (data.gameOver) {
-                            setStatus('finished');
-                            refreshUser();
-                            setGameOverResult({
-                                result: data.result,
-                                winnerId: data.winnerId,
-                                winnerUsername: data.winnerUsername,
-                                players: data.players,
-                                rankChanges: data.rankChanges,
-                            });
-                            if (data.winnerId && data.winnerId === userRef.current?.id) {
-                                fireConfetti();
+                    switch (state.op_code) {
+                        case OpCode.UPDATE:
+                            setBoard(data.board);
+                            if (data.marks && userRef.current) {
+                                const myMark = data.marks[userRef.current.id];
+                                if (myMark) {
+                                    setMySymbol(myMark);
+                                    const opponentMark = myMark === 'X' ? 'O' : 'X';
+                                    setCurrentTurn(data.currentTurn === userRef.current.id ? myMark : opponentMark);
+                                }
                             }
-                            stopPolling();
+                            if (data.lastMoveBy) {
+                                setLastMoveBy(data.lastMoveBy);
+                            }
+                            if (data.winnerId || data.draw) {
+                                setStatus('finished');
+                                setGameOverResult({
+                                    result: data.draw ? 'draw' : 'finished',
+                                    winnerId: data.winnerId
+                                });
+                            }
+                            break;
+
+                        case OpCode.TIMER:
+                            setSecondsLeft(data.secondsLeft);
+                            break;
+
+                        case OpCode.GAME_OVER:
+                            setStatus('finished');
+                            setGameOverResult({
+                                result: data.result || 'finished',
+                                winnerId: data.winnerId
+                            });
+                            if (data.winnerId === user?.id) fireConfetti();
+                            refreshUser();
+                            break;
+                    }
+                };
+
+                await socket.connect(session, true);
+                const match = await socket.joinMatch(matchId);
+
+                // Parse label to get mode, marks, and initial turn
+                if (match.label) {
+                    const label = JSON.parse(match.label);
+                    setGameMode(label.mode);
+                    if (label.marks && userRef.current) {
+                        const myMark = label.marks[userRef.current.id];
+                        if (myMark) {
+                            setMySymbol(myMark);
+                            const opponentMark = myMark === 'X' ? 'O' : 'X';
+                            // Initial turn setup from label - assuming player_x goes first or server provides currentTurn
+                            // The server initializes currentTurn to player_x in matchInit
+                            // We can check if user is player_x
+                            const isMyTurnInit = label.marks[userRef.current.id] === 'X';
+                            setCurrentTurn(isMyTurnInit ? myMark : opponentMark);
                         }
-                        break;
-                    case 'board_update':
-                        if (ackTimerRef.current) { clearTimeout(ackTimerRef.current); ackTimerRef.current = null; }
-                        setSecondsLeft(null);
-                        setBoard(normalizeBoard(data.board));
-                        setCurrentTurn(data.currentTurn);
-                        if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
-                        break;
-                    case 'game_over':
-                        setStatus('finished');
-                        refreshUser();
-                        if (data.board) setBoard(normalizeBoard(data.board));
-                        setGameOverResult({
-                            result: data.result,
-                            winnerId: data.winnerId,
-                            winnerUsername: data.winnerUsername,
-                            players: data.players,
-                            rankChanges: data.rankChanges,
-                        });
-                        // Fire confetti on victory
-                        if (data.winnerId && data.winnerId === userRef.current?.id) {
-                            fireConfetti();
-                        }
-                        stopPolling();
-                        break;
-                    case 'reconnected':
-                        setBoard(normalizeBoard(data.board));
-                        setCurrentTurn(data.currentTurn);
-                        if (data.lastMovedAt) setLastMovedAt(data.lastMovedAt);
-                        setStatus('playing');
-                        break;
-                    case 'move_rejected':
-                        // Cancel ack timer and revert optimistic update via REST
-                        if (ackTimerRef.current) { clearTimeout(ackTimerRef.current); ackTimerRef.current = null; }
-                        if (token) fetchMatchState(token);
-                        setError(data.reason || 'Move rejected');
-                        setTimeout(() => setError(''), 3000);
-                        break;
-                    case 'timer_update':
-                        console.log("[Timer Update]", data.secondsLeft);
-                        setSecondsLeft(data.secondsLeft);
-                        break;
-                    case 'error':
-                        setError(data.message || 'An error occurred');
-                        setTimeout(() => setError(''), 3000);
-                        break;
+                    }
                 }
-            };
 
-            ws.onclose = () => {
-                wsRef.current = null;
-                if (destroyed) return;
-                if (statusRef.current === 'finished') return;
-                // Fallback to REST polling while WS is down
-                startPolling();
-                // Try to reconnect WS after 3s
-                reconnectTimer = setTimeout(connect, 3000);
-            };
-        }
+                // Initial symbols based on join order or metadata
+                // In our main.ts, the first join gets X. 
+                // We'll trust the UPDATE broadcast for the most accurate state.
 
-        // Kick off WS + immediate REST fetch in parallel
-        connect();
-        fetchMatchState(token);
+                socketRef.current = socket;
+                setStatus('playing');
+            } catch (e: any) {
+                console.error("Match Join Error:", e);
+                if (!cancelled && retries > 0) {
+                    // Retry after 1 second — session may still be settling
+                    await new Promise(res => setTimeout(res, 1000));
+                    return connectToMatch(retries - 1);
+                }
+                if (!cancelled) setError("Failed to join match arena.");
+            }
+        };
+
+        connectToMatch();
 
         return () => {
-            destroyed = true;
-            if (reconnectTimer) clearTimeout(reconnectTimer);
-            stopPolling();
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
+            cancelled = true;
+            if (socketRef.current) socketRef.current.disconnect();
         };
-    }, [token, matchId]); // Only depends on token & matchId — stable across user hydration
+    }, [session, matchId, loading]);
 
-    const handleMove = (index: number) => {
-        if (status !== 'playing' || currentTurn !== mySymbol) return;
-        const symbol = mySymbolRef.current;
-        if (!symbol) return;
+    const handleMove = async (index: number) => {
+        if (status !== 'playing' || !socketRef.current) return;
 
-        // 1. Optimistic UI: paint the move and flip turn immediately
-        setBoard(prev => {
-            const next = [...prev];
-            next[index] = symbol;
-            return next;
-        });
-        const nextTurn = symbol === 'X' ? 'O' : 'X';
-        setCurrentTurn(nextTurn);
-
-        // 2. Send to WS
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'make_move', matchId, cell: index }));
+        try {
+            const payload = JSON.stringify({ index });
+            await socketRef.current.sendMatchState(matchId, OpCode.MOVE, payload);
+        } catch (e) {
+            console.error("Move Error:", e);
         }
-
-        // 3. Start 2s ack timer — if no WS ack arrives, fall back to REST
-        if (ackTimerRef.current) clearTimeout(ackTimerRef.current);
-        ackTimerRef.current = setTimeout(() => {
-            console.log('[Ack] No WS ack in 2s, falling back to REST');
-            if (token) fetchMatchState(token);
-        }, 2000);
     };
 
     const confirmForfeit = async () => {
-        console.log("Confirming forfeit for match:", matchId);
-        try {
-            await api.post(`/matches/${matchId}/forfeit`);
-            setShowForfeitModal(false);
-            // Fetch final match state to update UI (game_over, rank changes, etc.)
-            if (token) fetchMatchState(token);
-        } catch (err: any) {
-            console.error("Forfeit API Error:", err.response?.data || err.message);
-            setError("Failed to forfeit. Try again.");
-            setShowForfeitModal(false);
+        if (socketRef.current) {
+            try {
+                await socketRef.current.sendMatchState(matchId, OpCode.FORFEIT, JSON.stringify({}));
+                // Wait a tiny bit for delivery
+                await new Promise(resolve => setTimeout(resolve, 200));
+            } catch (e) {
+                console.error("Forfeit send error:", e);
+            }
         }
+        router.push('/play');
     };
 
     const isMyTurn = status === 'playing' && currentTurn === mySymbol;
@@ -415,6 +234,11 @@ export default function GamePage({ params }: { params: any }) {
                                 <Clock className="w-3 h-3 inline mr-1" /> {secondsLeft !== null ? `${secondsLeft}s` : '--s'}
                             </motion.span>
                         )}
+                        {lastMoveBy && status === 'playing' && (
+                            <span className="px-4 py-1.5 rounded-full text-xs md:text-sm font-medium bg-dark-800 border border-dark-400 text-gray-400">
+                                Last move: {lastMoveBy === user?.id ? 'You' : 'Opponent'}
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -430,8 +254,6 @@ export default function GamePage({ params }: { params: any }) {
                         const isWin = gameOverResult.winnerId === user?.id;
                         const isDraw = gameOverResult.result === 'draw';
                         const isLoss = !isDraw && !isWin;
-                        const myRankChange = gameOverResult.rankChanges?.[user!.id] ?? 0;
-                        const isForfeit = gameOverResult.result?.includes('forfeit');
 
                         return (
                             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -446,136 +268,37 @@ export default function GamePage({ params }: { params: any }) {
                                             : 'bg-gradient-to-b from-dark-800 to-dark-900 border-error/40 shadow-[0_0_60px_rgba(239,68,68,0.2)]'
                                         }`}
                                 >
-                                    {/* Glow effect */}
-                                    <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full blur-3xl opacity-20 ${isWin ? 'bg-brand-500' : isDraw ? 'bg-yellow-500' : 'bg-error'
-                                        }`} />
+                                    <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full blur-3xl opacity-20 ${isWin ? 'bg-brand-500' : isDraw ? 'bg-yellow-500' : 'bg-error'}`} />
 
-                                    {/* Icon */}
                                     <motion.div
                                         initial={{ scale: 0, rotate: -180 }}
                                         animate={{ scale: 1, rotate: 0 }}
                                         transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.2 }}
-                                        className={`relative mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-5 ${isWin
-                                            ? 'bg-brand-500/20 ring-2 ring-brand-500/40'
-                                            : isDraw
-                                                ? 'bg-yellow-500/20 ring-2 ring-yellow-500/40'
-                                                : 'bg-error/20 ring-2 ring-error/40'
-                                            }`}
+                                        className={`relative mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-5 ${isWin ? 'bg-brand-500/20 ring-2 ring-brand-500/40' : isDraw ? 'bg-yellow-500/20 ring-2 ring-yellow-500/40' : 'bg-error/20 ring-2 ring-error/40'}`}
                                     >
                                         {isWin && <Crown className="w-10 h-10 text-brand-400" />}
                                         {isDraw && <Minus className="w-10 h-10 text-yellow-400" />}
                                         {isLoss && <Frown className="w-10 h-10 text-error" />}
                                     </motion.div>
 
-                                    {/* Title */}
                                     <motion.h3
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: 0.3 }}
-                                        className={`text-4xl font-black mb-1 ${isWin ? 'text-brand-400' : isDraw ? 'text-yellow-400' : 'text-error'
-                                            }`}
+                                        className={`text-4xl font-black mb-1 ${isWin ? 'text-brand-400' : isDraw ? 'text-yellow-400' : 'text-error'}`}
                                     >
                                         {isWin ? 'Victory!' : isDraw ? 'Draw!' : 'Defeat'}
                                     </motion.h3>
 
-                                    {/* Subtitle */}
                                     <motion.p
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         transition={{ delay: 0.4 }}
                                         className="text-gray-400 text-sm mb-6"
                                     >
-                                        {isForfeit
-                                            ? (isWin ? 'Your opponent surrendered' : 'You surrendered')
-                                            : (isWin ? 'You outplayed your opponent!' : isDraw ? 'A hard-fought battle' : 'Better luck next time')}
+                                        {isWin ? 'You outplayed your opponent!' : isDraw ? 'A hard-fought battle' : 'Better luck next time'}
                                     </motion.p>
 
-                                    {/* Winner banner */}
-                                    {gameOverResult.winnerUsername && (
-                                        <motion.div
-                                            initial={{ opacity: 0, scale: 0.9 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            transition={{ delay: 0.45 }}
-                                            className="flex items-center justify-center gap-2 mb-5"
-                                        >
-                                            <Trophy className="w-4 h-4 text-yellow-400" />
-                                            <span className="text-sm font-semibold text-yellow-300">
-                                                {gameOverResult.winnerUsername} wins!
-                                            </span>
-                                        </motion.div>
-                                    )}
-
-                                    {/* Players & Rank Changes */}
-                                    {gameOverResult.players && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: 0.5 }}
-                                            className="bg-dark-900/80 border border-dark-400 rounded-2xl p-4 mb-6"
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                {/* Player X */}
-                                                <div className="flex-1 text-center">
-                                                    <p className={`text-xs font-bold mb-1 ${gameOverResult.players.X.id === user?.id ? 'text-brand-400' : 'text-gray-500'}`}>
-                                                        {gameOverResult.players.X.id === user?.id ? 'YOU' : 'OPP'}
-                                                    </p>
-                                                    <p className="text-white font-bold text-sm truncate px-1">{gameOverResult.players.X.username}</p>
-                                                    <div className="flex items-center justify-center gap-1 mt-1">
-                                                        <span className="text-xs text-gray-400">ELO {gameOverResult.players.X.rank}</span>
-                                                    </div>
-                                                    {gameOverResult.rankChanges && (
-                                                        <p className={`text-lg font-black mt-1 ${gameOverResult.rankChanges[gameOverResult.players.X.id] > 0 ? 'text-success' :
-                                                            gameOverResult.rankChanges[gameOverResult.players.X.id] < 0 ? 'text-error' : 'text-gray-400'
-                                                            }`}>
-                                                            {gameOverResult.rankChanges[gameOverResult.players.X.id] > 0 ? '+' : ''}
-                                                            {gameOverResult.rankChanges[gameOverResult.players.X.id]}
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                {/* VS divider */}
-                                                <div className="px-3">
-                                                    <Swords className="w-5 h-5 text-dark-400" />
-                                                </div>
-
-                                                {/* Player O */}
-                                                <div className="flex-1 text-center">
-                                                    <p className={`text-xs font-bold mb-1 ${gameOverResult.players.O.id === user?.id ? 'text-brand-400' : 'text-gray-500'}`}>
-                                                        {gameOverResult.players.O.id === user?.id ? 'YOU' : 'OPP'}
-                                                    </p>
-                                                    <p className="text-white font-bold text-sm truncate px-1">{gameOverResult.players.O.username}</p>
-                                                    <div className="flex items-center justify-center gap-1 mt-1">
-                                                        <span className="text-xs text-gray-400">ELO {gameOverResult.players.O.rank}</span>
-                                                    </div>
-                                                    {gameOverResult.rankChanges && (
-                                                        <p className={`text-lg font-black mt-1 ${gameOverResult.rankChanges[gameOverResult.players.O.id] > 0 ? 'text-success' :
-                                                            gameOverResult.rankChanges[gameOverResult.players.O.id] < 0 ? 'text-error' : 'text-gray-400'
-                                                            }`}>
-                                                            {gameOverResult.rankChanges[gameOverResult.players.O.id] > 0 ? '+' : ''}
-                                                            {gameOverResult.rankChanges[gameOverResult.players.O.id]}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    )}
-
-                                    {/* Your rank change highlight (fallback if no players data) */}
-                                    {!gameOverResult.players && gameOverResult.rankChanges && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: 0.5 }}
-                                            className="bg-dark-900 border border-dark-400 rounded-xl p-4 mb-6"
-                                        >
-                                            <p className="text-sm font-medium text-gray-400 mb-1">Rank Change</p>
-                                            <p className={`text-2xl font-bold ${myRankChange > 0 ? 'text-success' : myRankChange < 0 ? 'text-error' : 'text-gray-300'}`}>
-                                                {myRankChange > 0 ? '+' : ''}{myRankChange}
-                                            </p>
-                                        </motion.div>
-                                    )}
-
-                                    {/* Actions */}
                                     <motion.div
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}

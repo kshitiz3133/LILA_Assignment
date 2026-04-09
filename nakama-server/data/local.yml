@@ -1,0 +1,24 @@
+name: nakama-server
+cors_origins: ["*"]
+logger:
+  level: "info"
+  format: "json"
+  file: ""
+console:
+  port: 7351
+  max_log_lines: 1000
+  username: "admin"
+  password: "password"
+session:
+  encryption_key: "default_encryption_key"
+  token_expiry_sec: 3600
+socket:
+  server_key: "default_server_key"
+  port: 7350
+  max_message_size_bytes: 4096
+match:
+  input_queue_size: 128
+  call_stack_size: 128
+runtime:
+  path: "/nakama/data/modules"
+  js_entrypoint: "dist/main.js"

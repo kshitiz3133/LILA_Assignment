@@ -14,12 +14,8 @@ const TURN_LIMIT_MS = 10 * 1000; // 10s displayed to user
 const FORFEIT_TOLERANCE_MS = 12 * 1000; // 12s hard limit for the backend (2s buffer)
 
 function startTurnTimer(matchId, currentPlayerId) {
-  console.log(`[Timer] Starting timer for match ${matchId}, current player: ${currentPlayerId}`);
   const room = getRoom(matchId);
-  if (!room) {
-    console.warn(`[Timer] Room not found for match ${matchId}`);
-    return;
-  }
+  if (!room) return;
 
   // Clear previous timer if any
   if (room.timerRef) {
@@ -37,7 +33,6 @@ function startTurnTimer(matchId, currentPlayerId) {
     
     // Only broadcast updates while within the 10s display window
     if (now <= deadline + 1000) {
-      if (secondsLeft % 5 === 0) console.log(`[Timer] Match ${matchId}: ${secondsLeft}s left`);
       broadcast(matchId, { type: 'timer_update', secondsLeft });
     }
 

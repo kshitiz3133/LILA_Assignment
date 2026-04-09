@@ -1,8 +1,10 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import api from '@/lib/api';
+import client from '@/lib/nakama';
+import { Session } from '@heroiclabs/nakama-js';
 import { useRouter, usePathname } from 'next/navigation';
+import { v4 as uuidv4 } from 'uuid';
 
 interface User {
     id: string;
@@ -17,9 +19,9 @@ interface User {
 
 interface AuthContextType {
     user: User | null;
-    token: string | null;
-    login: (token: string, userData: User) => void;
+    session: Session | null;
     logout: () => void;
+    login: (username: string) => Promise<void>;
     refreshUser: () => Promise<void>;
     loading: boolean;
 }
@@ -28,79 +30,192 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
     const pathname = usePathname();
 
     useEffect(() => {
-        // Attempt to hydrate user from localStorage
-        const storedToken = localStorage.getItem('token');
-
-        if (storedToken) {
-            setToken(storedToken);
-            api.get('/auth/me').then(res => {
-                setUser(res.data.player);
-                localStorage.setItem('user', JSON.stringify(res.data.player));
-            }).catch(() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                setToken(null);
-                setUser(null);
-            });
-
-            const storedUser = localStorage.getItem('user');
-            if (storedUser) {
-                try {
-                    setUser(JSON.parse(storedUser));
-                } catch (e) {
-                    localStorage.removeItem('user');
-                }
+        const initAuth = async () => {
+            let deviceId = localStorage.getItem('nakama_device_id');
+            if (!deviceId) {
+                deviceId = uuidv4();
+                localStorage.setItem('nakama_device_id', deviceId);
             }
-        }
 
-        setLoading(false);
+            try {
+                const storedToken = localStorage.getItem('nakama_session_token');
+                const storedRefreshToken = localStorage.getItem('nakama_refresh_token');
+                const storedUsername = localStorage.getItem('nakama_username');
+                let currentSession: Session | null = null;
+
+                if (storedToken && storedRefreshToken) {
+                    try {
+                        currentSession = Session.restore(storedToken, storedRefreshToken);
+                        if (currentSession.isexpired(Math.floor(Date.now() / 1000))) {
+                            // Try to refresh or re-auth with custom
+                            if (storedUsername) {
+                                currentSession = await client?.authenticateCustom(storedUsername, true, undefined, { device_id: deviceId });
+                            } else {
+                                currentSession = null;
+                            }
+                        }
+                    } catch (e) {
+                        currentSession = null;
+                    }
+                }
+
+                if (!currentSession && storedUsername) {
+                    currentSession = await client?.authenticateCustom(storedUsername, true, storedUsername, { device_id: deviceId });
+                }
+
+                if (!currentSession) {
+                    setLoading(false);
+                    return;
+                }
+
+                localStorage.setItem('nakama_session_token', currentSession.token);
+                if (currentSession.refresh_token) {
+                    localStorage.setItem('nakama_refresh_token', currentSession.refresh_token);
+                }
+                setSession(currentSession);
+
+                // Fetch account
+                const account = await client.getAccount(currentSession);
+
+                // Fetch stats from simpler RPC endpoint
+                let stats = { rank: 1000, wins: 0, losses: 0, win_streak: 0, best_streak: 0 };
+                try {
+                    const rpcRes = await client.rpc(currentSession, "get_player_stats", {});
+                    if (rpcRes.payload) {
+                        const parsed = typeof rpcRes.payload === 'string' ? JSON.parse(rpcRes.payload) : rpcRes.payload;
+                        stats = { ...stats, ...parsed };
+                    }
+                } catch (e) {
+                    console.error("Failed to read player stats RPC:", e);
+                }
+
+                const mappedUser: User = {
+                    id: account.user?.id || '',
+                    username: account.user?.username || 'Player',
+                    rank: stats.rank,
+                    wins: stats.wins,
+                    losses: stats.losses,
+                    win_streak: stats.win_streak,
+                    best_streak: stats.best_streak,
+                };
+                setUser(mappedUser);
+            } catch (e) {
+                console.error('Nakama Auth Error:', e);
+                router.push('/login');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        initAuth();
     }, []);
 
     useEffect(() => {
         if (!loading) {
-            if (!user && !pathname.includes('/login') && !pathname.includes('/register')) {
-                router.push('/login');
-            } else if (user && (pathname.includes('/login') || pathname.includes('/register') || pathname === '/')) {
+            // Nakama is always authenticated via device in this flow
+            if (user && (pathname.includes('/login') || pathname.includes('/register') || pathname === '/')) {
                 router.push('/profile');
             }
         }
     }, [user, loading, pathname, router]);
 
-    const login = (newToken: string, userData: User) => {
-        localStorage.setItem('token', newToken);
-        localStorage.setItem('user', JSON.stringify(userData));
-        setToken(newToken);
-        setUser(userData);
-        router.push('/profile');
-    };
-
     const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setToken(null);
+        localStorage.removeItem('nakama_session_token');
+        localStorage.removeItem('nakama_refresh_token');
+        localStorage.removeItem('nakama_username');
+        setSession(null);
         setUser(null);
         router.push('/login');
     };
 
-    const refreshUser = async () => {
-        if (!token) return;
+    const login = async (username: string) => {
+        setLoading(true);
         try {
-            const res = await api.get('/auth/me');
-            setUser(res.data.player);
-            localStorage.setItem('user', JSON.stringify(res.data.player));
+            let deviceId = localStorage.getItem('nakama_device_id');
+            if (!deviceId) {
+                deviceId = uuidv4();
+                localStorage.setItem('nakama_device_id', deviceId);
+            }
+
+            const currentSession = await client.authenticateCustom(username, true, username, { device_id: deviceId });
+
+            localStorage.setItem('nakama_session_token', currentSession.token);
+            if (currentSession.refresh_token) {
+                localStorage.setItem('nakama_refresh_token', currentSession.refresh_token);
+            }
+            localStorage.setItem('nakama_username', username);
+
+            setSession(currentSession);
+            const account = await client.getAccount(currentSession);
+
+            let stats = { rank: 1000, wins: 0, losses: 0, win_streak: 0, best_streak: 0 };
+            try {
+                const rpcRes = await client.rpc(currentSession, "get_player_stats", {});
+                if (rpcRes.payload) {
+                    const parsed = typeof rpcRes.payload === 'string' ? JSON.parse(rpcRes.payload) : rpcRes.payload;
+                    stats = { ...stats, ...parsed };
+                }
+            } catch (e) {
+                console.error("Failed to read player stats RPC:", e);
+            }
+
+            const mappedUser: User = {
+                id: account.user?.id || '',
+                username: account.user?.username || 'Player',
+                rank: stats.rank,
+                wins: stats.wins,
+                losses: stats.losses,
+                win_streak: stats.win_streak,
+                best_streak: stats.best_streak,
+            };
+            setUser(mappedUser);
+        } catch (e) {
+            console.error('Login error:', e);
+            throw e;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const refreshUser = async () => {
+        if (!session) return;
+        try {
+            const account = await client.getAccount(session);
+
+            let stats = { rank: 1000, wins: 0, losses: 0, win_streak: 0, best_streak: 0 };
+            try {
+                const rpcRes = await client.rpc(session, "get_player_stats", {});
+                if (rpcRes.payload) {
+                    const parsed = typeof rpcRes.payload === 'string' ? JSON.parse(rpcRes.payload) : rpcRes.payload;
+                    stats = { ...stats, ...parsed };
+                }
+            } catch (e) {
+                console.error("Failed to read player stats RPC:", e);
+            }
+
+            const mappedUser: User = {
+                id: account.user?.id || '',
+                username: account.user?.username || 'Player',
+                rank: stats.rank,
+                wins: stats.wins,
+                losses: stats.losses,
+                win_streak: stats.win_streak,
+                best_streak: stats.best_streak,
+            };
+            setUser(mappedUser);
         } catch (e) {
             console.error('Refresh user error');
         }
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, refreshUser, loading }}>
+        <AuthContext.Provider value={{ user, session, logout, login, refreshUser, loading }}>
             {children}
         </AuthContext.Provider>
     );

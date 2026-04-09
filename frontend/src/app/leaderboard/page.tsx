@@ -5,7 +5,7 @@ import NavBar from '@/components/NavBar';
 import { useAuth } from '@/context/AuthContext';
 import { motion } from 'framer-motion';
 import { Trophy, Medal, Loader2, Award } from 'lucide-react';
-import api from '@/lib/api';
+import client from '@/lib/nakama';
 
 interface PlayerRank {
     id: string;
@@ -14,18 +14,32 @@ interface PlayerRank {
 }
 
 export default function LeaderboardPage() {
-    const { user } = useAuth();
+    const { user, session } = useAuth();
     const [players, setPlayers] = useState<PlayerRank[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Need token for /leaderboard? The router generally requires auth for leaderboard. 
-        // Let's assume it doesn't strictly need one, but api client handles token insertion.
-        api.get('/leaderboard')
-            .then(res => setPlayers(res.data))
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, []);
+        if (!session) return;
+
+        const fetchLeaderboard = async () => {
+            try {
+                const records = await client.listLeaderboardRecords(session, "global_rank");
+                const mapped = (records.records || []).map((r: any) => ({
+                    id: r.owner_id as string,
+                    username: r.username || 'Anonymous',
+                    rank_score: r.score ? parseInt(r.score) : 0
+                }));
+                // Sort by score descending
+                setPlayers(mapped.sort((a: PlayerRank, b: PlayerRank) => b.rank_score - a.rank_score));
+            } catch (err) {
+                console.error('Leaderboard error', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchLeaderboard();
+    }, [session]);
 
     return (
         <div className="min-h-screen flex flex-col">

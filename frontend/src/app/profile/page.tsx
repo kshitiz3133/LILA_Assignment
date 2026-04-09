@@ -5,19 +5,16 @@ import NavBar from '@/components/NavBar';
 import { motion } from 'framer-motion';
 import { Trophy, Medal, MapPin, Search } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import api from '@/lib/api';
+import { useEffect } from 'react';
 
 export default function ProfilePage() {
-    const { user: contextUser, token } = useAuth();
-    const [user, setUser] = useState(contextUser);
+    const { user, session, refreshUser } = useAuth();
 
     useEffect(() => {
-        if (!token) return;
-        api.get('/auth/me')
-            .then(res => setUser(res.data.player))
-            .catch(console.error);
-    }, [token]);
+        if (session) {
+            refreshUser();
+        }
+    }, [session]);
 
     if (!user) return null;
 

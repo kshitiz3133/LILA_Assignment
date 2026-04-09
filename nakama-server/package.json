@@ -1,0 +1,12 @@
+{
+    "name": "nakama-server-logic",
+    "version": "1.0.0",
+    "description": "Nakama TypeScript Runtime Logic for Ranked Tic-Tac-Toe",
+    "devDependencies": {
+        "nakama-runtime": "github:heroiclabs/nakama-common",
+        "typescript": "^4.9.4"
+    },
+    "scripts": {
+        "build": "tsc"
+    }
+}
