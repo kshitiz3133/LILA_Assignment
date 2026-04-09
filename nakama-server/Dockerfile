@@ -20,4 +20,4 @@ COPY data/local.yml /nakama/data/local.yml
 ENV PORT=7350
 
 # Render provides DATABASE_URL, e.g. postgres://user:password@host/dbname. We map this to Nakama's database requirement
-ENTRYPOINT ["/bin/sh", "-ecx", "/nakama/nakama migrate up --database.address $DATABASE_URL && /nakama/nakama --name nakama1 --database.address $DATABASE_URL --socket.port $PORT --console.port 7351"]
+ENTRYPOINT ["/bin/sh", "-ecx", "/nakama/nakama migrate up --database.address $DATABASE_URL && /nakama/nakama --config /nakama/data/local.yml --name nakama1 --database.address $DATABASE_URL --socket.port $PORT --console.port 7351"]
