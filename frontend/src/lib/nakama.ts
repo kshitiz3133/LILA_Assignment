@@ -1,11 +1,10 @@
 import { Client } from "@heroiclabs/nakama-js";
 
-// Initialize the Nakama client
-// These should ideally come from environment variables
-const serverKey = "default_server_key";
-const host = process.env.NEXT_PUBLIC_NAKAMA_HOST || "localhost";
-const port = "7350";
-const useSSL = false;
+// Initialize the Nakama client with environment variable fallbacks
+const serverKey = process.env.NEXT_PUBLIC_NAKAMA_SERVER_KEY || "default_server_key";
+const host = process.env.NEXT_PUBLIC_NAKAMA_HOST || "127.0.0.1";
+const port = process.env.NEXT_PUBLIC_NAKAMA_PORT || "7350";
+const useSSL = process.env.NEXT_PUBLIC_NAKAMA_USE_SSL === "true";
 
 const client = new Client(serverKey, host, port, useSSL);
 
