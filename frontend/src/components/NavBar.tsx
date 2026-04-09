@@ -20,6 +20,7 @@ export default function NavBar() {
                 </Link>
 
                 <div className="flex items-center gap-6">
+                    {/* 
                     <Link
                         href="/leaderboard"
                         className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${pathname === '/leaderboard' ? 'text-brand-400' : 'text-gray-400 hover:text-white'}`}
@@ -27,6 +28,7 @@ export default function NavBar() {
                         <Trophy className="w-4 h-4" />
                         <span className="hidden sm:inline">Leaderboard</span>
                     </Link>
+                    */}
 
                     <div className="h-6 w-px bg-dark-400" />
 

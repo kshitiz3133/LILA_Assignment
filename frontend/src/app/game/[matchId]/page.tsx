@@ -315,9 +315,9 @@ export default function GamePage({ params }: { params: any }) {
                                         <Link href="/play" className="flex-1 bg-brand-600 hover:bg-brand-500 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2">
                                             <Swords className="w-4 h-4" /> Play Again
                                         </Link>
-                                        <Link href="/leaderboard" className="flex-1 bg-dark-400 hover:bg-dark-400/80 text-white py-3.5 rounded-xl font-bold transition flex items-center justify-center gap-2">
+                                        {/* <Link href="/leaderboard" className="flex-1 bg-dark-400 hover:bg-dark-400/80 text-white py-3.5 rounded-xl font-bold transition flex items-center justify-center gap-2">
                                             <Trophy className="w-4 h-4" /> Leaderboard
-                                        </Link>
+                                        </Link> */}
                                     </motion.div>
                                 </motion.div>
                             </div>

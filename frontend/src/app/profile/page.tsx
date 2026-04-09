@@ -91,9 +91,11 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="mt-8 flex gap-4">
+                        {/* 
                         <Link href="/leaderboard" className="flex-1 bg-dark-400 hover:bg-dark-400/80 text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2">
                             <Trophy className="w-5 h-5" /> Scoreboards
                         </Link>
+                        */}
 
                         {user.current_match_id ? (
                             <Link href={`/game/${user.current_match_id}`} className="flex-1 bg-warning hover:bg-warning/80 text-black py-3.5 rounded-xl font-bold transition shadow-lg shadow-warning/25 flex justify-center items-center gap-2">
