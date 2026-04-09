@@ -159,13 +159,20 @@ export default function GamePage({ params }: { params: any }) {
     }, [session, matchId, loading]);
 
     const handleMove = async (index: number) => {
-        if (status !== 'playing' || !socketRef.current) return;
+        if (status !== 'playing' || !socketRef.current || board[index] !== null) return;
+
+        // Optimistic UI update for immediate feedback
+        const newBoard = [...board];
+        newBoard[index] = mySymbol;
+        setBoard(newBoard);
+        setCurrentTurn(mySymbol === 'X' ? 'O' : 'X');
 
         try {
             const payload = JSON.stringify({ index });
             await socketRef.current.sendMatchState(matchId, OpCode.MOVE, payload);
         } catch (e) {
             console.error("Move Error:", e);
+            // If the socket fails entirely, the match is broken anyway so we don't explicitly revert the board
         }
     };
 
